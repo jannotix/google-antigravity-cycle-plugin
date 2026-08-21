@@ -1,0 +1,26 @@
+# Rust
+target/
+**/*.rs.bk
+Cargo.lock
+
+# Node / TypeScript
+node_modules/
+dist/
+*.tsbuildinfo
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*~
+
+# Test & runtime caches
+.cache/
+*.log
+
+# Local Credentials & State (Strictly Git-Ignored)
+.env.local
+credentials.json
+.agents/local/

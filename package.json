@@ -1,0 +1,35 @@
+{
+  "name": "cycle-antigravity",
+  "version": "1.0.0",
+  "description": "Evidence-gated delivery plugin for Google Antigravity Desktop and CLI",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "build": "bun build ./src/server.ts --outdir ./dist --target node",
+    "build:rust": "cargo build --workspace --release",
+    "check": "cargo fmt --check && cargo clippy --workspace --all-targets --all-features -- -D warnings",
+    "test": "cargo test --workspace --all-features",
+    "format": "cargo fmt"
+  },
+  "keywords": [
+    "antigravity",
+    "antigravity-plugin",
+    "code-intel",
+    "delivery-governance",
+    "evidence-gated",
+    "tree-sitter"
+  ],
+  "author": "Gianluca Iannotta",
+  "license": "FSL-1.1-MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jannotix/google-antigravity-cycle-plugin.git"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.8.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.6.0"
+  }
+}

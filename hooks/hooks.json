@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit|Bash|Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${ANTIGRAVITY_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/guard.mjs\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

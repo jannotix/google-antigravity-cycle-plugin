@@ -1,0 +1,11 @@
+{
+  "name": "antigravity-cycle",
+  "version": "1.0.0",
+  "description": "Evidence-gated software delivery extension for Google Antigravity",
+  "author": "Gianluca Iannotta",
+  "license": "FSL-1.1-MIT",
+  "skills": "./skills",
+  "hooks": "./hooks/hooks.json",
+  "agents": "./agents",
+  "mcpServers": "./.mcp.json"
+}
