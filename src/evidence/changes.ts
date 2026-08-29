@@ -1,19 +1,26 @@
 import { execFile } from "node:child_process"
 import { createHash } from "node:crypto"
+import { createReadStream } from "node:fs"
 import { readFile } from "node:fs/promises"
+import { pipeline } from "node:stream/promises"
 import { join } from "node:path"
 import { promisify } from "node:util"
 import { gitArgs } from "../git.ts"
 
 const execFileAsync = promisify(execFile)
 
-const MAX_FILE_BYTES = 8 * 1_024 * 1_024
+/**
+ * The scanner reads a file into memory to run patterns over it, so it needs a bound. Hashing does
+ * not: it streams, and a cap there would leave a file recorded with no digest, which the integrity
+ * comparison then had to treat as either a match or a mystery.
+ */
+const MAX_SCAN_BYTES = 32 * 1_024 * 1_024
 const GIT_TIMEOUT_MS = 30_000
 
 export type ChangeKind = "added" | "deleted" | "modified"
 
 export interface ChangedFile {
-  /** null when the file is gone, or too large to hash. */
+  /** null only when the file could not be read at all, which is drift, never a match. */
   readonly digest: string | null
   readonly kind: ChangeKind
   readonly path: string
@@ -75,20 +82,22 @@ function kindOf(status: string): ChangeKind {
   return "modified"
 }
 
+/** null when the content cannot be scanned, which the caller must report rather than absorb. */
 export async function readChangedContent(root: string, path: string): Promise<string | null> {
   try {
     const bytes = await readFile(join(root, path))
-    return bytes.byteLength > MAX_FILE_BYTES ? null : bytes.toString("utf8")
+    return bytes.byteLength > MAX_SCAN_BYTES ? null : bytes.toString("utf8")
   } catch {
     return null
   }
 }
 
+/** Streamed, so size is not a reason for a candidate file to go unbound to its bytes. */
 async function digestOf(path: string): Promise<string | null> {
   try {
-    const bytes = await readFile(path)
-    if (bytes.byteLength > MAX_FILE_BYTES) return null
-    return createHash("sha256").update(bytes).digest("hex")
+    const hash = createHash("sha256")
+    await pipeline(createReadStream(path), hash)
+    return hash.digest("hex")
   } catch {
     return null
   }

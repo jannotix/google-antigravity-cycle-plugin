@@ -6,6 +6,7 @@ import { createHash, randomUUID } from "node:crypto"
  */
 export const DIGEST_DOMAIN = {
   candidate: "cycle/candidate/v1",
+  captureCapability: "cycle/capture-capability/v1",
   goal: "cycle/goal-objective/v1",
   historyEntry: "cycle/history-entry/v1",
   output: "cycle/verification-output/v1",

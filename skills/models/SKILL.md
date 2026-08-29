@@ -5,7 +5,7 @@ description: Which model and which provider each Cycle role actually runs on, wh
 
 Role models and provider paths: $ARGUMENTS
 
-1. Call `mcp__plugin_cycle_control__doctor`.
+1. Call `cycle-control/doctor`.
 2. Report `report.models.roles` as a table: role, configured model, resolved model, effort,
    provider, and what is billed. One row per role, no prose between rows.
 3. Then report, in one line each:

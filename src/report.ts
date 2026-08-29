@@ -6,8 +6,6 @@ const MARK: Readonly<Record<Severity, string>> = { ok: "ok", warn: "warn", error
 
 /** What pays, in the words a user can act on rather than the internal name. */
 const BILLED_TO: Readonly<Record<Billing, string>> = {
-  "gateway-credential": "env credential",
-  "gateway-held": "gateway account",
   subscription: "subscription",
 }
 
@@ -27,6 +25,9 @@ export function renderDoctor(report: DoctorReport): string {
   lines.push(row("node", report.runtime.node))
   lines.push(row("platform", `${report.runtime.platform}/${report.runtime.arch}${report.runtime.wsl ? " (WSL)" : ""}`))
   lines.push(row("git", report.runtime.git ?? "not found"))
+  // Named next to the version because the two answer different questions, and the version has been
+  // read as an answer to this one.
+  lines.push(row("answering for", `${report.runtime.startedMinutesAgo} min`))
   lines.push(
     row(
       "package managers",
@@ -78,7 +79,7 @@ export function renderDoctor(report: DoctorReport): string {
       "endpoint",
       report.models.baseUrlHost === null
         ? "default"
-        : `${report.models.baseUrlHost}${report.models.routedElsewhere ? " (not the Anthropic API)" : ""}`,
+        : report.models.baseUrlHost,
     ),
   )
   lines.push(
@@ -103,6 +104,14 @@ export function renderDoctor(report: DoctorReport): string {
   lines.push("Policy")
   lines.push(row("gate strictness", report.configuration.gateStrictness))
   lines.push(row("repair cycles", String(report.configuration.maxRepairCycles)))
+  lines.push(
+    row(
+      "options delivered",
+      report.configuration.blank > 0
+        ? `${report.configuration.delivered} (${report.configuration.blank} arrived empty)`
+        : String(report.configuration.delivered),
+    ),
+  )
   lines.push("")
 
   lines.push("Findings")

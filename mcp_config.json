@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "cycle-control": {
+      "command": "node",
+      "args": ["${extensionPath}${/}dist${/}server.js"],
+      "env": {
+        "CYCLE_PLUGIN_ROOT": "${extensionPath}"
+      }
+    }
+  }
+}

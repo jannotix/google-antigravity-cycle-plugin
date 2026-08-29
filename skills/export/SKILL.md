@@ -10,7 +10,7 @@ Export the record: $ARGUMENTS
    the frozen candidate). Default to `state` and say which you chose.
 2. **Ask the user to confirm**, saying what will be produced and where it will go. Export is never
    automatic.
-3. On an explicit yes, call `mcp__plugin_cycle_control__workflow` with
+3. On an explicit yes, call `cycle-control/workflow` with
    `{"operation": "export", "kind": "...", "confirm": true}`, adding `workflowId` if one was named.
 4. Write the returned JSON to the file the user named, with the Write tool. If they named none, ask
    where it should go — do not print thousands of lines into the conversation.

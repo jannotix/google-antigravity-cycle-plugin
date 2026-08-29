@@ -5,7 +5,7 @@ description: First-run check and guided configuration for Cycle — what the ins
 
 Set up Cycle in this project: $ARGUMENTS
 
-1. Call `mcp__plugin_cycle_control__doctor` and print the `summary` field exactly as returned,
+1. Call `cycle-control/doctor` and print the `summary` field exactly as returned,
    inside a fenced block.
 2. If any finding is marked `FAIL`, stop there. State that Cycle cannot run a governed workflow
    until it is fixed, and give the one concrete step that fixes the first failure. Do not continue

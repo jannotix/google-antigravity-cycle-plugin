@@ -8,7 +8,7 @@ Project memory: $ARGUMENTS
 Retrieval is two-level on purpose. The index is cheap enough to list a dozen entries; the detail is
 not. Never fetch detail you were not going to read.
 
-1. **Search.** Call `mcp__plugin_cycle_control__memory` with
+1. **Search.** Call `cycle-control/memory` with
    `{"operation": "search", "query": "<the words that matter>", "paths": ["<areas the work touches>"]}`.
    You get identifier, kind, confidence, title, scope and how much evidence backs each entry.
 2. **Choose.** Pick the few entries that actually bear on the question. Say why you picked them.

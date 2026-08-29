@@ -4,6 +4,7 @@ import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import { promisify } from "node:util"
 
+import { redactSecrets } from "../secrets.ts"
 import { parseCommand, UnsafeCommand, type SafeCommand } from "../workflow/commands.ts"
 import { runCommand, type RunOutcome } from "./runner.ts"
 import { gitArgs } from "../git.ts"
@@ -147,6 +148,8 @@ export async function runProof(root: string, request: ProofRequest): Promise<Pro
     return {
       containment: [
         `disposable copy of ${copied} files, deleted after the run`,
+        "environment reduced to the variables an interpreter needs to start",
+        "output redacted for secret shapes before it is recorded or returned",
         script ? `proof script written to ${scriptPath} inside the copy only` : "no script written",
         `hard timeout of ${PROOF_TIMEOUT_SECONDS}s`,
         "http and https proxied to a closed loopback port; localhost excluded",
@@ -154,7 +157,9 @@ export async function runProof(root: string, request: ProofRequest): Promise<Pro
         "no shell: program and argument vector only",
       ],
       demonstrated: outcome.unavailable === null && outcome.exitCode === 0,
-      outcome,
+      // A proof that printed a secret would otherwise put it in the evidence record and in the
+      // reviewer's context. What it demonstrated does not depend on the literal bytes.
+      outcome: { ...outcome, output: redactSecrets(outcome.output) },
     }
   } finally {
     await rm(workspace, { force: true, recursive: true })
@@ -162,14 +167,49 @@ export async function runProof(root: string, request: ProofRequest): Promise<Pro
 }
 
 /**
+ * What an interpreter needs to start, and nothing else. The proof's source is written by a model
+ * that has read the repository, so anything reachable from inside the process is reachable by
+ * whatever that repository asked it to write: inheriting the whole environment handed every token
+ * and key the user happens to have exported to a script chosen by the content under review.
+ */
+const PASSED_THROUGH = new Set(
+  [
+    "COMSPEC",
+    "HOME",
+    "HOMEDRIVE",
+    "HOMEPATH",
+    "LANG",
+    "LC_ALL",
+    "NUMBER_OF_PROCESSORS",
+    "PATH",
+    "PATHEXT",
+    "PROCESSOR_ARCHITECTURE",
+    "SYSTEMDRIVE",
+    "SYSTEMROOT",
+    "TEMP",
+    "TMP",
+    "TMPDIR",
+    "TZ",
+    "USERPROFILE",
+    "WINDIR",
+  ].map((name) => name.toLowerCase()),
+)
+
+/**
  * ponytail: environment-level network denial. It stops every client that honours proxy settings,
  * which is the realistic proof, but a proof opening a raw socket would still reach the network. An
  * OS sandbox — AppContainer on Windows, a namespace on Linux — is the upgrade when a proof needs to
- * run code that is actively hostile rather than merely demonstrative.
+ * run code that is actively hostile rather than merely demonstrative. Until then proofs are off
+ * unless the user turns them on.
  */
 function containedEnvironment(): NodeJS.ProcessEnv {
+  const inherited: NodeJS.ProcessEnv = {}
+  for (const [name, value] of Object.entries(process.env)) {
+    if (PASSED_THROUGH.has(name.toLowerCase())) inherited[name] = value
+  }
+
   return {
-    ...process.env,
+    ...inherited,
     ALL_PROXY: "http://127.0.0.1:1",
     HTTPS_PROXY: "http://127.0.0.1:1",
     HTTP_PROXY: "http://127.0.0.1:1",

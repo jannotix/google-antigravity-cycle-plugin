@@ -14,7 +14,7 @@ export function identifyProject(
   directory: string | undefined,
   environment: NodeJS.ProcessEnv = process.env,
 ): Project {
-  const path = resolve(directory || environment["CLAUDE_PROJECT_DIR"] || process.cwd())
+  const path = resolve(directory || environment["ANTIGRAVITY_PROJECT_DIR"] || environment["CYCLE_PROJECT_DIR"] || process.cwd())
   const normalized = process.platform === "win32" ? path.toLowerCase() : path
   return {
     id: createHash("sha256").update(normalized).digest("hex").slice(0, 32),

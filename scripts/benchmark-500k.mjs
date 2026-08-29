@@ -1,0 +1,80 @@
+import { execFileSync } from 'node:child_process'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { statfsSync } from 'node:fs'
+import { freemem, tmpdir } from 'node:os'
+import { join } from 'node:path'
+
+import { indexProject } from '../dist/intel/indexer.js'
+import { Database } from '../dist/store/database.js'
+
+const count = numberOption('--files', 500_000)
+const memoryFloor = numberOption('--minimum-free-memory-gib', 8) * 1024 ** 3
+const diskFloor = numberOption('--minimum-free-disk-gib', 15) * 1024 ** 3
+const output = join(process.cwd(), 'certification-artifacts')
+mkdirSync(output, { recursive: true })
+const availableMemory = freemem()
+const disk = statfsSync(tmpdir())
+const availableDisk = Number(disk.bavail) * Number(disk.bsize)
+
+if (availableMemory < memoryFloor || availableDisk < diskFloor) {
+  const report = {
+    availableDiskBytes: availableDisk,
+    availableMemoryBytes: availableMemory,
+    requestedFiles: count,
+    requiredDiskBytes: diskFloor,
+    requiredMemoryBytes: memoryFloor,
+    status: 'BLOCKED_RESOURCE_ADMISSION',
+  }
+  writeFileSync(join(output, 'benchmark-500k.json'), `${JSON.stringify(report, null, 2)}\n`)
+  console.error(`benchmark blocked: memory=${availableMemory}, disk=${availableDisk}`)
+  process.exit(2)
+}
+
+const root = mkdtempSync(join(tmpdir(), 'cycle-500k-'))
+const database = new Database({ path: join(root, 'index.db') })
+try {
+  const project = join(root, 'project')
+  mkdirSync(project)
+  execFileSync('git', ['init', '--quiet'], { cwd: project })
+  const generatedAt = Date.now()
+  for (let index = 0; index < count; index += 1) {
+    const directory = join(project, `d${Math.floor(index / 1000).toString().padStart(4, '0')}`)
+    if (index % 1000 === 0) mkdirSync(directory)
+    const semantic = index % 10 === 0
+    const extension = semantic ? 'js' : 'txt'
+    const content = semantic ? `export const value${index} = ${index}\n` : `${index}\n`
+    writeFileSync(join(directory, `f${index}.${extension}`), content)
+  }
+  const generationMs = Date.now() - generatedAt
+  const coldAt = Date.now()
+  const cold = await indexProject(database, 'benchmark-500k', project)
+  const coldMs = Date.now() - coldAt
+  const warmAt = Date.now()
+  const warm = await indexProject(database, 'benchmark-500k', project)
+  const warmMs = Date.now() - warmAt
+  const report = {
+    cold,
+    coldMs,
+    fileMix: { semanticJavaScript: Math.ceil(count / 10), trackedFallback: count - Math.ceil(count / 10) },
+    generatedFiles: count,
+    generationMs,
+    peakRssBytes: process.memoryUsage().rss,
+    status: cold.updated + cold.skipped === count && warm.updated === 0 ? 'PASS' : 'FAIL',
+    warm,
+    warmMs,
+  }
+  writeFileSync(join(output, 'benchmark-500k.json'), `${JSON.stringify(report, null, 2)}\n`)
+  console.log(`benchmark ${report.status}: cold=${coldMs}ms warm=${warmMs}ms files=${count}`)
+  if (report.status !== 'PASS') process.exitCode = 1
+} finally {
+  database.close()
+  rmSync(root, { recursive: true, force: true })
+}
+
+function numberOption(name, fallback) {
+  const index = process.argv.indexOf(name)
+  if (index === -1) return fallback
+  const value = Number(process.argv[index + 1])
+  if (!Number.isInteger(value) || value < 1) throw new Error(`${name} must be a positive integer`)
+  return value
+}

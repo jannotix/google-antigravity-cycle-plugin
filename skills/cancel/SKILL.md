@@ -5,7 +5,7 @@ description: Cancel the current Cycle workflow. Terminal and confirmed — autho
 
 Cancel the workflow: $ARGUMENTS
 
-1. Call `mcp__plugin_cycle_control__workflow` with `{"operation": "status"}` and report what is
+1. Call `cycle-control/workflow` with `{"operation": "status"}` and report what is
    about to be abandoned: the state, the request it was working on, and whether a candidate is
    frozen.
 2. **Ask the user to confirm.** Do not call the cancel operation until they answer.

@@ -5,10 +5,10 @@ description: Independent security and architecture review — trust boundaries, 
 
 Review for security and architecture: $ARGUMENTS
 
-1. Call `mcp__plugin_cycle_control__role_settings` with `consultation: "security"`.
-2. Invoke the Agent tool with `subagent_type` set to the returned `agent`. Set `model` to the
-   returned `model`; when it is `null`, omit the parameter entirely. Pass the prompt below.
-3. Call `mcp__plugin_cycle_control__record_event` with `action: "consultation.security"` and
+1. Call `cycle-control/role_settings` with `consultation: "security"`.
+2. Call Antigravity `invoke_subagent` with one entry in `Subagents`: `TypeName` is the returned
+   `agent`, `Role` is `security-reviewer`, `Workspace` is `share`, and `Prompt` is the prompt below.
+3. Call `cycle-control/record_event` with `action: "consultation.security"` and
    `role: "security_reviewer"`.
 4. Report findings ranked by severity, separating what was demonstrated from what is suspected.
 

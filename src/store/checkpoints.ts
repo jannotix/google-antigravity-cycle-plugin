@@ -117,9 +117,12 @@ export function keyPermissions(dataDirectory: string): KeyPermissions {
 
   let acl: string
   try {
+    // stderr is discarded explicitly: without it Node forwards it to the parent, and on a data
+    // directory with no key yet icacls writes a not-found line into the server's own stream.
     acl = execFileSync("icacls", [path], {
       encoding: "utf8",
       shell: false,
+      stdio: ["ignore", "pipe", "ignore"],
       timeout: ICACLS_TIMEOUT_MS,
       windowsHide: true,
     })

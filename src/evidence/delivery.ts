@@ -267,6 +267,22 @@ async function git(root: string, args: readonly string[]): Promise<string | null
 
 /** Section 8: the same comparison that guards verification guards promotion. */
 async function assertUnchanged(root: string, manifest: CandidateManifest): Promise<void> {
+  // The working tree is only half of what the candidate was judged against. A commit landing
+  // between approval and promotion leaves every candidate file identical while moving the base out
+  // from under it, and the delivered commit would then carry a Base-revision trailer naming a
+  // revision that is not its parent. Recovery deliberately does not run this: by then the delivery
+  // may already have committed, so HEAD is expected to have moved.
+  const head = (await git(root, ["rev-parse", "HEAD"]))?.trim() ?? null
+  if (head === null) {
+    throw new DeliveryAborted("the base revision could not be read, so the candidate cannot be promoted")
+  }
+  if (head !== manifest.baseRevision) {
+    throw new DeliveryAborted(
+      `the base revision moved after approval: judged on ${manifest.baseRevision.slice(0, 12)}, ` +
+        `now ${head.slice(0, 12)}`,
+    )
+  }
+
   const current = await changedFiles(root)
   if (current === null) {
     throw new DeliveryAborted("the working tree could not be read, so the candidate cannot be compared")

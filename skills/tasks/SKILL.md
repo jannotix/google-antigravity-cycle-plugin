@@ -5,7 +5,7 @@ description: The task breakdown of the current Cycle workflow — identifiers, t
 
 Report the task graph: $ARGUMENTS
 
-1. Call `mcp__plugin_cycle_control__workflow` with `{"operation": "status"}`, passing `workflowId`
+1. Call `cycle-control/workflow` with `{"operation": "status"}`, passing `workflowId`
    only if `$ARGUMENTS` names one.
 2. If `tasks` is empty, say the workflow has no task breakdown — the quick route has no architect
    and therefore no task graph — and report the state instead.

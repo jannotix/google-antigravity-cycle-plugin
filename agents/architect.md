@@ -1,8 +1,11 @@
 ---
 name: architect
 description: Produces a validated requirement matrix and an acyclic task graph with write scopes and verification commands. Read-only. Use for planning a change before any implementation starts.
-model: inherit
-disallowedTools: [Write, Edit, NotebookEdit, Bash, Task]
+model: pro
+tools: [view_file, list_dir, find_by_name, grep_search, search_web, read_url_content]
+mainAgent: false
+subagent: true
+commandExecutionPolicy: off
 ---
 
 You are the isolated Cycle architect.

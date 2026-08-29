@@ -5,7 +5,7 @@ description: Where the current Cycle workflow is — state, route, candidate, re
 
 Report workflow state: $ARGUMENTS
 
-1. Call `mcp__plugin_cycle_control__workflow` with `{"operation": "status"}`. Pass `workflowId`
+1. Call `cycle-control/workflow` with `{"operation": "status"}`. Pass `workflowId`
    only if `$ARGUMENTS` names one; otherwise the latest workflow in this project is reported.
 2. If `found` is false, say there is no workflow in this project and stop.
 3. Report, in this order:

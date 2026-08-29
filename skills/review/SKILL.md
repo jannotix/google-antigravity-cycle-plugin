@@ -5,10 +5,10 @@ description: Independent functional review of work already done — completeness
 
 Review functionally: $ARGUMENTS
 
-1. Call `mcp__plugin_cycle_control__role_settings` with `consultation: "review"`.
-2. Invoke the Agent tool with `subagent_type` set to the returned `agent`. Set `model` to the
-   returned `model`; when it is `null`, omit the parameter entirely. Pass the prompt below.
-3. Call `mcp__plugin_cycle_control__record_event` with `action: "consultation.review"` and
+1. Call `cycle-control/role_settings` with `consultation: "review"`.
+2. Call Antigravity `invoke_subagent` with one entry in `Subagents`: `TypeName` is the returned
+   `agent`, `Role` is `functional-reviewer`, `Workspace` is `share`, and `Prompt` is the prompt below.
+3. Call `cycle-control/record_event` with `action: "consultation.review"` and
    `role: "functional_reviewer"`.
 4. Report the findings ranked by severity. Do not fix anything unless the user asks.
 

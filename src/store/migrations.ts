@@ -364,6 +364,28 @@ alter table index_state add column size integer not null default -1;
 alter table index_state add column modified_at integer not null default -1;
 `,
   },
+  {
+    version: 7,
+    name: "capture-capability",
+    sql: `
+-- The interface layer's proof is a flow somebody drove. Over stdio the plane has no notion of who
+-- is calling: it reads a line. A submission that names its own role is therefore a claim, and the
+-- party the gate exists to check can make it. The plane instead mints one secret per reviewing role
+-- when reviews open, keeps only its digest, and hands each to that role alone. The role then comes
+-- from the record rather than from the caller, and the secret is spent on first use.
+create table capture_capabilities (
+  digest       text primary key,
+  workflow_id  text not null references workflows (id) on delete cascade,
+  candidate_id text not null references candidates (id) on delete cascade,
+  role         text not null,
+  issued_at    integer not null,
+  consumed_at  integer,
+  unique (candidate_id, role)
+) strict;
+
+create index capture_capabilities_by_candidate on capture_capabilities (candidate_id);
+`,
+  },
 ]
 
 export const CURRENT_SCHEMA_VERSION = MIGRATIONS.reduce(

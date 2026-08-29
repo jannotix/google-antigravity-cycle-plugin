@@ -1,0 +1,95 @@
+name: release-candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Exact branch, tag or SHA to certify
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+
+jobs:
+  candidate:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+      - name: prove exact checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          git status --porcelain | tee status.txt
+          test ! -s status.txt
+          git rev-parse HEAD | tee exact-sha.txt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26.3.0
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm audit --audit-level=high
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm test
+      - run: npm run validate:contract
+      - name: install Antigravity CLI on Linux
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL https://antigravity.google/cli/install.sh -o /tmp/install-agy.sh
+          bash /tmp/install-agy.sh --skip-aliases --skip-path
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: install Antigravity CLI on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Invoke-WebRequest https://antigravity.google/cli/install.cmd -OutFile "$env:RUNNER_TEMP\install-agy.cmd"
+          & cmd.exe /c "$env:RUNNER_TEMP\install-agy.cmd --skip-aliases --skip-path"
+          "$env:LOCALAPPDATA\agy\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      - name: native Antigravity plugin validation
+        run: agy plugin validate .
+      - run: node scripts/sbom.mjs --check
+      - run: npm run repeat:critical
+      - run: npm run package
+      - run: npm run provenance
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: build/cycle-antigravity-*.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-candidate-${{ matrix.os }}
+          path: |
+            build/cycle-antigravity-*.zip
+            build/cycle-antigravity-*.zip.sha256
+            build/cycle-antigravity-*.provenance.json
+            certification-artifacts/repeat-critical.json
+            exact-sha.txt
+          if-no-files-found: error
+
+  benchmark-500k:
+    runs-on: [self-hosted, linux, x64, cycle-large]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26.3.0
+      - run: npm ci --ignore-scripts
+      - run: npm run build
+      - run: npm run benchmark:500k
+      - uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-500k
+          path: certification-artifacts/benchmark-500k.json
+          if-no-files-found: error

@@ -10,7 +10,7 @@ the numbers and the named symbols.
 
 | Ask | Call |
 | --- | --- |
-| build, refresh, rebuild, reindex, or `$ARGUMENTS` empty | `mcp__plugin_cycle_control__index_project` |
+| build, refresh, rebuild, reindex, or `$ARGUMENTS` empty | `cycle-control/index_project` |
 | status, size, how fresh | `graph_query` with `operation: "status"` |
 | where is X defined | `graph_query` with `operation: "symbol"`, `name: "X"` |
 | what calls X, what does X use | `graph_query` with `operation: "neighbours"`, `name: "X"` |

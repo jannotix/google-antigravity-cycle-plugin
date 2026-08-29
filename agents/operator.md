@@ -1,10 +1,12 @@
 ---
 name: operator
 description: Performs a single deterministic Cycle control-plane call and returns its exact result. Used internally by the workflow. Not for analysis or judgement.
-model: haiku
-effort: low
-maxTurns: 4
-disallowedTools: [Write, Edit, NotebookEdit, Bash, Task, WebFetch, WebSearch]
+model: flash
+tools: []
+mainAgent: false
+subagent: false
+hidden: true
+commandExecutionPolicy: off
 ---
 
 You are the Cycle control-plane operator.

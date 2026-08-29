@@ -5,7 +5,7 @@ description: Reconcile a Cycle workflow after the application restarted or a run
 
 Reconcile and report: $ARGUMENTS
 
-1. Call `mcp__plugin_cycle_control__workflow` with `{"operation": "reconcile"}`. Pass
+1. Call `cycle-control/workflow` with `{"operation": "reconcile"}`. Pass
    `workflowId` only if `$ARGUMENTS` names one; otherwise the latest workflow in this project is
    reconciled.
 2. Report the returned `state`, the repair budget, and the `next` line **verbatim**. It says what

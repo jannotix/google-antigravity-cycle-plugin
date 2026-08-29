@@ -1,119 +1,101 @@
 # Cycle for Antigravity
 
-Evidence-gated software delivery extension for Google Antigravity Desktop and CLI.
+<p align="center">
+  <img src="assets/logo.svg" width="160" alt="Cycle logo">
+</p>
 
-Cycle replaces the single-agent self-approval pattern with five isolated roles: an architect, an executor, two independent reviewers, and a final arbiter that evaluates the candidate against your immutable original request. A candidate is delivered only when real evidence satisfies every gate and the arbiter approves.
+Cycle is an evidence-gated delivery control plane for Google Antigravity Desktop and CLI. It uses
+five packaged custom agents—architect, executor, functional reviewer, security reviewer and
+arbiter—while a deterministic local Node control plane owns workflow state, verification evidence,
+candidate freezing and delivery.
 
-## The Problem
+## Production architecture
 
-A coding agent operating in a single context inherits its own blind spots and declares its work complete without deterministic proof. Common failure modes include:
-- An endpoint with no user interface reaching it.
-- A database migration created but never executed against a real database instance.
-- Tests passing against mocks while real integration paths remain broken.
-- Security controls implemented on primary paths but bypassed on secondary paths.
-- Code completing syntactically while failing enterprise packaging or runtime constraints.
+Version 1.1 uses one control plane: TypeScript on Node 26. Rust `workflowd` sources remain in the
+repository as non-shipping research and are excluded from the artifact, CI runtime and support
+contract. No feature depends on Rust, Cargo or a native binary.
 
-Cycle eliminates these blind spots by enforcing separation of powers and requiring verifiable evidence before code promotion.
+Antigravity supplies role isolation through custom-agent tool allowlists. Read-only roles receive no
+write, command or delegation tools. The executor receives only the tools needed to implement and
+verify one bounded task. A native `PreToolUse` hook forces explicit user approval for publication,
+history-changing Git operations and recursive deletion. The control plane independently rejects
+out-of-scope changes and refuses delivery without passed mandatory gates.
 
-## Architecture
+## Requirements
 
-```
-User Request ──▶  Architect       Requirement matrix, acyclic task DAG, write scopes
-                  Executor        Bounded tasks executed in isolated Git worktrees
-                  Verification    Deterministic checks (types, tests, linters, security scans)
-                  Reviewers       Functional & security reviews in isolated sessions
-                  Arbiter         Judges frozen candidate digest against immutable request
-                  Delivery        Atomic promotion of approved candidate bytes
-```
+- Google Antigravity CLI 1.1.22 or newer, or the corresponding Antigravity Desktop runtime.
+- Node.js 26.3.x. The exact development version is recorded in `.node-version`.
+- Git 2.30 or newer.
+- The target project's own build and test tools.
 
-### 1. Separation of Powers
-- **Architect**: Generates requirement matrix and acyclic task DAG with explicit write scopes. Read-only; cannot modify files or approve candidates.
-- **Executor**: Implements authorized tasks within designated write scopes. Cannot alter acceptance criteria or self-approve.
-- **Functional Reviewer**: Independently verifies user-facing completeness, edge cases, and regression risks.
-- **Security & Architecture Reviewer**: Evaluates trust boundaries, credential handling, injection vulnerabilities, dependency supply chains, and architectural consistency.
-- **Arbiter**: Evaluates raw deterministic evidence, reviewer findings, candidate diffs, and the immutable original request to issue structured approval or rejection.
+Antigravity exposes the native `inherit`, `flash` and `pro` model tiers. Cycle does not claim
+arbitrary external-provider routing on this host. Roles are separate sessions even when tiers are
+shared; `/cycle:doctor` reports correlation honestly.
 
-### 2. Candidate Freeze & Delivery
-- Changes are frozen into a deterministic manifest with SHA-256 digests before gates execute.
-- Verification failures or arbiter rejections route back to targeted repair (up to 5 cycles by default).
-- Delivery performs transactional promotion against the base Git revision, ensuring no unapproved bytes enter the target workspace.
+## Install
 
-### 3. Native Code Intelligence
-- Incremental Tree-sitter semantic graph for 16+ languages (Rust, TypeScript/JS, Python, Go, Java/Kotlin, C#, C/C++, PHP, Ruby, Swift, Dart, SQL, HTML/CSS, Shell, Data formats).
-- Symbol, import, call, and inheritance relationship tracking with precision-first confidence levels.
-- Benchmarked and certified for repositories exceeding 500,000 files.
+Use the unpacked release artifact, not a source snapshot without `dist/`:
 
-### 4. Tamper-Evident Project History & Memory
-- Append-only cryptographic ledger with SHA-256 hash chains and locally signed Ed25519 checkpoints.
-- Automatic secret redaction prevents credential leakage into persistent stores.
-- Project memory stores verified decisions, validated fixes, and constraints with SQLite FTS5 progressive retrieval.
-
-### 5. Adaptive Resource Governance
-- Continuous monitoring of CPU, RAM, disk space, and process trees.
-- Enforces a minimum 15% physical RAM reserve before admitting resource-intensive tasks (compilation, test runners, headless browser instances).
-
-## Model Independence
-
-Cycle is completely model-agnostic. Each role can be configured with distinct providers and models in user or project settings (`~/.gemini/config/cycle/config.json` or `.agents/cycle.json`):
-
-```json
-{
-  "models": {
-    "architect": "gemini-2.5-pro",
-    "executor": "gemini-2.5-pro",
-    "functional_reviewer": "gemini-2.5-flash",
-    "security_reviewer": "gemini-2.5-pro",
-    "arbiter": "gemini-2.5-pro"
-  }
-}
+```text
+agy plugin validate C:\path\to\cycle-antigravity-1.1.0
+agy plugin install C:\path\to\cycle-antigravity-1.1.0
 ```
 
-Use `/cycle:models` to inspect current role assignments and verify verdict independence.
+Then restart Antigravity and run:
 
-## Commands
-
-All operations execute automatically when preconditions are met. Commands are available for inspection, control, and recovery:
-
-| Command | Description |
-| --- | --- |
-| `/cycle:doctor` | Verifies runtime prerequisites, IPC health, SQLite database integrity, and key store |
-| `/cycle:run [auto\|quick\|full]` | Arms the workflow with an optional routing override |
-| `/cycle:status` | Displays phase, active tasks, resource metrics, and blockers |
-| `/cycle:tasks` | Displays task DAG, ownership, write scopes, and status |
-| `/cycle:evidence` | Lists verification receipts and gate evaluations for the frozen candidate |
-| `/cycle:models` | Inspects and configures per-role provider and model assignments |
-| `/cycle:permissions` | Inspects role boundaries and active permission presets |
-| `/cycle:limits` | Displays resource admission thresholds and repair budget settings |
-| `/cycle:memory` | Searches and inspects verified project knowledge and architectural decisions |
-| `/cycle:history` | Queries audit ledger events and verifies hash chain integrity |
-| `/cycle:pause` / `/cycle:resume` | Safely pauses or resumes active workflow execution |
-| `/cycle:retry` | Extends repair budget or re-executes transiently failed tasks |
-| `/cycle:cancel` | Safely terminates active execution and cleans up temporary worktrees |
-| `/cycle:help` | Complete command reference and guidance |
-
-## Installation
-
-Add the plugin to your Antigravity configuration or workspace `.agents/plugins.json`:
-
-```json
-{
-  "plugins": ["antigravity-cycle"]
-}
-```
-
-Then run:
 ```text
 /cycle:doctor
 ```
 
-## Requirements
+For recoverable local lifecycle operations:
 
-- Google Antigravity Desktop or CLI (Windows x64 / Linux x64)
-- Git
-- Project build and test toolchains
+```text
+node bin/cycle-lifecycle.mjs install --source C:\path\to\unpacked-artifact
+node bin/cycle-lifecycle.mjs upgrade --source C:\path\to\new-artifact
+node bin/cycle-lifecycle.mjs uninstall
+node bin/cycle-lifecycle.mjs rollback
+```
 
-## License
+Upgrade and uninstall move the previous plugin into `~/.gemini/config/cycle-backups`; they do not
+delete it. Durable Cycle state is stored outside the plugin installation and survives all four
+operations.
 
-FSL-1.1-MIT. Copyright 2026 Gianluca Iannotta. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
+## Commands
 
-Cycle for Antigravity is an independent integration. It is not affiliated with, sponsored by, or endorsed by Google.
+| Command | Purpose |
+| --- | --- |
+| `/cycle:run [auto\|quick\|full]` | Execute the governed workflow |
+| `/cycle:doctor` | Check runtime, storage, roles and policy |
+| `/cycle:status` | Show workflow state and blockers |
+| `/cycle:tasks` | Show accepted task ownership and state |
+| `/cycle:evidence` | Show citable verification evidence |
+| `/cycle:pause`, `/cycle:resume`, `/cycle:retry`, `/cycle:cancel` | Control recovery |
+| `/cycle:architect`, `/cycle:executor`, `/cycle:review`, `/cycle:security`, `/cycle:judge` | Advisory isolated roles |
+| `/cycle:index`, `/cycle:memory`, `/cycle:history`, `/cycle:goal` | Local intelligence and durable governance |
+| `/cycle:models`, `/cycle:permissions`, `/cycle:limits`, `/cycle:export`, `/cycle:help` | Inspect configuration and controls |
+
+The full command contract is in [docs/manual.md](docs/manual.md). Installation and rollback details
+are in [docs/INSTALLATION.md](docs/INSTALLATION.md).
+
+## Development gates
+
+```text
+npm ci
+npm run typecheck
+npm run build
+npm test
+npm run validate:plugin
+npm run sbom
+npm run package
+```
+
+`npm run check` executes the complete deterministic sequence. Platform and credentialed
+certification remain separate because CI cannot honestly prove a live Antigravity multi-agent run
+without an authenticated host.
+
+## License and status
+
+FSL-1.1-MIT. See `LICENSE`, `NOTICE` and `THIRD-PARTY-NOTICES.md`.
+
+The earlier public `v1.0.0` is not a supported production artifact. It is not retagged or rewritten.
+Cycle is independent and is not affiliated with, sponsored by or endorsed by Google.

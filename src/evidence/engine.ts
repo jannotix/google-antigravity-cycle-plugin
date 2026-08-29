@@ -180,7 +180,13 @@ function integrity(
   }
 
   const now = new Map(changed.map((file) => [file.path, file.digest]))
-  const drifted = frozen.filter((file) => now.get(file.path) !== file.digest)
+  // A digest that could not be computed is not evidence of anything. Comparing two unknowns and
+  // calling them equal is how a file whose bytes were never bound passed as unchanged.
+  const drifted = frozen.filter((file) => {
+    const current = now.get(file.path)
+    if (current === undefined || current === null || file.digest === null) return true
+    return current !== file.digest
+  })
   const appeared = changed.filter((file) => !frozen.some((entry) => entry.path === file.path))
 
   if (drifted.length === 0 && appeared.length === 0) {
@@ -201,20 +207,34 @@ function integrity(
 async function secretScan(root: string, changed: readonly ChangedFile[]): Promise<Evidence> {
   const startedAt = Date.now()
   const found: string[] = []
+  const unread: string[] = []
+  let scanned = 0
 
   for (const file of changed) {
     if (file.kind === "deleted") continue
     const content = await readChangedContent(root, file.path)
-    if (content === null) continue
+    // Counting a file nobody could read among the files that came back clean is the gate claiming
+    // coverage it did not have. Its stated precondition is that every changed content is scanned,
+    // so a file that was not scanned fails it and is named.
+    if (content === null) {
+      unread.push(file.path)
+      continue
+    }
+    scanned += 1
     for (const match of findSecrets(content)) found.push(`${file.path}: ${match.rule}`)
   }
 
-  return evidenceFor(SECRET_SCAN, startedAt, found.length === 0 ? "passed" : "failed", {
+  const clean = found.length === 0 && unread.length === 0
+  const lines = [
+    ...(found.length === 0 ? [] : ["secrets found in changed content", ...found]),
+    ...(unread.length === 0
+      ? []
+      : [`${unread.length} changed file(s) could not be read and were not scanned:`, ...unread]),
+  ]
+
+  return evidenceFor(SECRET_SCAN, startedAt, clean ? "passed" : "failed", {
     // The matched text is never echoed: recording a secret to prove it was found would publish it.
-    output:
-      found.length === 0
-        ? `${changed.length} changed files scanned, no secret shape found`
-        : ["secrets found in changed content", ...found].join("\n"),
+    output: clean ? `${scanned} changed files scanned, no secret shape found` : lines.join("\n"),
   })
 }
 

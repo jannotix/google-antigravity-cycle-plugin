@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
+
 import { release } from "./admission.ts"
 import { ROLES, type Role } from "./config.ts"
 import { diagnose } from "./diagnostics.ts"
@@ -55,7 +58,23 @@ import {
   workflowStatus,
 } from "./workflow/service.ts"
 
-const VERSION = "1.0.0"
+/**
+ * Read from the manifest rather than written here. A literal drifts the moment a release bumps the
+ * manifest and forgets this line, and a doctor reporting a version the code is not is worse than
+ * one reporting none: it was read as proof that a stale process was answering, and sent the reader
+ * hunting a delivery bug that did not exist.
+ */
+const VERSION = manifestVersion()
+
+function manifestVersion(): string {
+  try {
+    const manifest = join(import.meta.dirname, "..", "package.json")
+    const version = JSON.parse(readFileSync(manifest, "utf8")).version
+    return typeof version === "string" && version.length > 0 ? version : "unknown"
+  } catch {
+    return "unknown"
+  }
+}
 const MAX_ACTION = 128
 const MAX_METADATA_ENTRIES = 32
 const MAX_METADATA_VALUE = 4_096
@@ -96,8 +115,8 @@ const doctor: ToolDefinition = {
 
 const roleSettings: ToolDefinition = {
   description:
-    "Resolve the agent, model and effort configured for one advisory role. Call this before " +
-    "invoking a Cycle role so the user's own model configuration is honoured.",
+    "Resolve the Antigravity custom-agent name and model tier configured for one advisory role. " +
+    "Returns data only; the calling skill invokes the named role with invoke_subagent.",
   inputSchema: {
     additionalProperties: false,
     properties: {
@@ -113,20 +132,27 @@ const roleSettings: ToolDefinition = {
       advisory: true,
       agent: resolved.agent,
       effort: resolved.effort,
-      instruction: resolved.inherits
-        ? "Invoke the agent without a model parameter: this role inherits the session model."
-        : `Invoke the agent with model "${resolved.model}".`,
+      // No imperative field here, deliberately. This is tool output, and tool output is data: a
+      // sentence telling the caller to invoke something is indistinguishable from an injection
+      // riding in a tool result, and an agent that guards against that refuses it — along with the
+      // legitimate model beside it, silently falling back to the session default. The skill holds
+      // the instruction; this returns what the instruction needs.
+      inherits: resolved.inherits,
       model: resolved.model,
+      // Antigravity accepts the native inherit, flash and pro tiers. Null means inherit.
+      subagentModel: resolved.subagentModel,
       projectId: cycle.project.id,
       role: resolved.role,
-      warning:
-        process.env["CLAUDE_CODE_SUBAGENT_MODEL"] === undefined
-          ? null
-          : "CLAUDE_CODE_SUBAGENT_MODEL is set and overrides this assignment.",
+      warning: null,
     }
   },
 }
 
+/**
+ * What the caller needs before it spends a workflow on this role: an override that will silently
+ * replace the model, and a model the session has no way to reach. Both make the returned
+ * assignment untrue at the moment it is used.
+ */
 const permissions: ToolDefinition = {
   description:
     "The immutable boundaries between the Cycle roles: what each may do, what it is denied, and " +
@@ -138,10 +164,9 @@ const permissions: ToolDefinition = {
     return {
       boundaries: BOUNDARIES,
       enforcement: [
-        "declaration: each read-only role declares the writing tools as disallowed, and every " +
-          "role declares Task as disallowed",
-        "runtime: a PreToolUse hook denies a write by a read-only role, a subtask by any role, " +
-          "and a git invocation by the executor that would move HEAD or rewrite history",
+        "declaration: each Antigravity custom agent exposes only the tools its role needs",
+        "runtime: a PreToolUse hook forces explicit approval for history-changing, publishing, " +
+          "and recursive deletion commands",
         "reconciliation: after each executor task the control plane reads the worktree itself and " +
           "rejects the task if any changed path falls outside the write scopes the plan authorized",
       ],
@@ -541,7 +566,9 @@ const workflowTool: ToolDefinition = {
   description:
     "Drive one governed Cycle workflow. The state machine decides what is allowed next; an " +
     "operation sent in the wrong state is refused rather than reordered. `submit_browser_evidence` " +
-    "records a captured user flow and its accessibility tree as the interface layer's proof. " +
+    "records a captured user flow and its accessibility tree. A reviewer proves the interface " +
+    "layer by spending the `captureToken` it was issued when the candidate was frozen; a " +
+    "submission without one is recorded as a self-report and carries no weight. " +
     "`run_proof` executes one security proof against a disposable copy of the candidate: supply " +
     "the proof source as `script` and write it so exit code 0 means the vulnerability was shown. " +
     "`deliver` promotes the approved bytes and re-verifies them; `reconcile` resumes a workflow " +
@@ -566,6 +593,7 @@ const workflowTool: ToolDefinition = {
       rationale: { maxLength: 2_048, type: "string" },
       reason: { maxLength: 512, type: "string" },
       script: { maxLength: 65_536, type: "string" },
+      captureToken: { maxLength: 128, type: "string" },
       snapshot: { type: "object" },
       request: { maxLength: 100_000, type: "string" },
       role: { enum: ["functional_reviewer", "security_reviewer"], type: "string" },
@@ -582,6 +610,7 @@ const workflowTool: ToolDefinition = {
   name: "workflow",
   async run(args) {
     const context: ServiceContext = {
+      configuration: cycle.configuration,
       database: cycle.requireStore(),
       dataDirectory: cycle.dataDirectory,
       maxRepairCycles: cycle.configuration.maxRepairCycles,
@@ -589,7 +618,7 @@ const workflowTool: ToolDefinition = {
     }
     // Surfaced on every workflow answer while it is true, because a caller acting on state
     // whose record has been altered should never learn that from a separate command.
-    const flag: Record<string, string> = startupIntegrity === null ? {} : { historyAltered: startupIntegrity }
+    const flag = startupIntegrity === null ? {} : { historyAltered: startupIntegrity }
     const id = () => {
       const value = args["workflowId"]
       if (typeof value !== "string" || !value) throw new Error("this operation requires workflowId")
@@ -616,10 +645,10 @@ const workflowTool: ToolDefinition = {
       case "report_task": {
         // Layer three reconciles against the worktree, not against the executor's summary, so the
         // change set is read here rather than taken from the caller.
-        const changed =
-          args["status"] === "completed"
-            ? ((await changedFiles(cycle.project.path)) ?? []).map((file) => file.path)
-            : []
+        // changedFiles returns null when the change set cannot be determined; that null is passed
+        // through, because only the layer that knows the scope rule may decide what unknown means.
+        const read = args["status"] === "completed" ? await changedFiles(cycle.project.path) : []
+        const changed = read === null ? null : read.map((file) => file.path)
         return reportTask(
           context,
           id(),
@@ -653,8 +682,12 @@ const workflowTool: ToolDefinition = {
           (args["role"] as "functional_reviewer" | "security_reviewer") ?? "functional_reviewer",
           args["verdict"],
         )
-      case "submit_browser_evidence":
-        return submitBrowserEvidence(context, id(), args["snapshot"])
+      case "submit_browser_evidence": {
+        // The role is never taken from the caller: it is read from the capability the caller spends.
+        // A caller with no capability is recording its own report of its own work.
+        const token = typeof args["captureToken"] === "string" ? args["captureToken"] : null
+        return submitBrowserEvidence(context, id(), args["snapshot"], token)
+      }
       case "run_proof":
         return await submitSecurityProof(context, id(), cycle.project.path, {
           ...(typeof args["command"] === "string" ? { command: args["command"] } : {}),

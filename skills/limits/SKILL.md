@@ -5,7 +5,7 @@ description: What Cycle is allowed to take from this machine, what the machine h
 
 Admission and resource governance: $ARGUMENTS
 
-1. Call `mcp__plugin_cycle_control__limits` with `{"operation": "status"}`.
+1. Call `cycle-control/limits` with `{"operation": "status"}`.
 2. Report, in this order:
    - **`pressure`** — if it is not null, this is the answer. Say it verbatim: it names the reserve
      that was breached, or says the metrics could not be read.

@@ -1,0 +1,7 @@
+# The repository stores LF. Without this, a checkout or an edit on Windows can rewrite every line
+# of a file and bury a real change in a diff nobody can read.
+* text=auto eol=lf
+
+# Binary, byte for byte.
+*.wasm binary
+*.zip binary

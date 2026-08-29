@@ -1,0 +1,55 @@
+name: check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26.3.0
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npm audit --audit-level=high
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm test
+      - run: npm run validate:contract
+      - run: node scripts/sbom.mjs --check
+      - run: npm run repeat:critical
+      - run: npm run package
+      - name: verify packaged file set
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="$(ls build/cycle-antigravity-*.zip)"
+          list="$(unzip -Z1 "$archive")"
+          for required in plugin.json mcp_config.json hooks.json dist/server.js LICENSE NOTICE THIRD-PARTY-NOTICES.md sbom.cdx.json; do
+            echo "$list" | grep -qx "$required" || { echo "missing $required" >&2; exit 1; }
+          done
+          if echo "$list" | grep -Eq '(^|/)tests?/|\.test\.|\.map$|(^|/)src/'; then
+            echo "artifact contains development files" >&2
+            exit 1
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cycle-antigravity-${{ matrix.os }}
+          path: |
+            build/cycle-antigravity-*.zip
+            build/cycle-antigravity-*.zip.sha256
+            certification-artifacts/repeat-critical.json
+          if-no-files-found: error

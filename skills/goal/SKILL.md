@@ -5,7 +5,7 @@ description: A persistent objective above individual cycles — versioned plans,
 
 Goal Mode: $ARGUMENTS
 
-Every operation goes to `mcp__plugin_cycle_control__goal`.
+Every operation goes to `cycle-control/goal`.
 
 ## Starting one
 

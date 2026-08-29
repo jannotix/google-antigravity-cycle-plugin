@@ -26,6 +26,12 @@ import { gitArgs } from "../git.ts"
 const execFileAsync = promisify(execFile)
 const MAX_FILE_BYTES = 2 * 1024 * 1024
 /** Enough to keep every worker busy, small enough that memory does not grow with the corpus. */
+/**
+ * How many files are stat'ed concurrently. Wide enough to keep the thread pool busy, bounded so a
+ * repository's own file list does not become the memory problem.
+ */
+const STAT_CHUNK = 512
+
 const PARSE_CHUNK = 10_000
 const MODULE_KIND = "module"
 
@@ -37,6 +43,12 @@ export interface IndexReport {
   readonly skipped: number
   readonly unchanged: number
   readonly updated: number
+  /**
+   * Where the pass spent its time, in milliseconds. A delta on a large repository is dominated by
+   * one of these three and never obviously by which, so the pass reports it rather than leaving
+   * the next person to guess from a total.
+   */
+  readonly spent: { readonly edges: number; readonly parse: number; readonly scan: number }
   /** True when indexing stopped early to leave the machine to something more urgent. */
   readonly yielded: boolean
 }
@@ -72,38 +84,50 @@ export async function indexProject(
   let yielded = false
 
   const stats = new Map<string, { modifiedAt: number; size: number }>()
-  for (const path of present) {
-    options.signal?.throwIfAborted()
+  const startedScan = Date.now()
 
-    const info = await statOf(join(projectRoot, path))
-    if (info === null) continue
-    stats.set(path, info)
+  // Stat'ed a chunk at a time rather than one file at a time. Finding out what changed costs one
+  // stat per file whatever else happens, but awaiting them singly leaves the thread pool idle
+  // between syscalls, and on a large repository that wait — not the filesystem — becomes the cost
+  // of a delta.
+  const paths = [...present]
+  for (let start = 0; start < paths.length; start += STAT_CHUNK) {
+    const slice = paths.slice(start, start + STAT_CHUNK)
+    const infos = await Promise.all(slice.map((path) => statOf(join(projectRoot, path))))
 
-    // The cheap question first. A recorded entry whose size and last-write time still match was
-    // read once and does not need reading again — which is the difference between minutes and
-    // hours on a large repository. `modifiedAt < indexedAt` closes the race where a file is written
-    // in the same tick it was indexed in: then the digest decides, as it always could.
-    const recorded = known.get(path)
-    if (
-      recorded !== undefined &&
-      recorded.size === info.size &&
-      recorded.modifiedAt === info.modifiedAt &&
-      info.modifiedAt >= 0 &&
-      info.modifiedAt < recorded.indexedAt
-    ) {
-      unchanged += 1
-      continue
-    }
+    for (const [offset, path] of slice.entries()) {
+      options.signal?.throwIfAborted()
 
-    const digest = await digestOf(join(projectRoot, path), info.size)
-    if (digest === null) continue
-    digests.set(path, digest)
-    if (recorded?.digest === digest) {
-      unchanged += 1
-      // Touched but unchanged: refresh the stat cache so the next pass answers without reading.
-      touchIndexState(database, projectId, path, info.size, info.modifiedAt, Date.now())
-    } else {
-      changed.push(path)
+      const info = infos[offset] ?? null
+      if (info === null) continue
+      stats.set(path, info)
+
+      // The cheap question first. A recorded entry whose size and last-write time still match was
+      // read once and does not need reading again — which is the difference between minutes and
+      // hours on a large repository. `modifiedAt < indexedAt` closes the race where a file is
+      // written in the same tick it was indexed in: then the digest decides, as it always could.
+      const recorded = known.get(path)
+      if (
+        recorded !== undefined &&
+        recorded.size === info.size &&
+        recorded.modifiedAt === info.modifiedAt &&
+        info.modifiedAt >= 0 &&
+        info.modifiedAt < recorded.indexedAt
+      ) {
+        unchanged += 1
+        continue
+      }
+
+      const digest = await digestOf(join(projectRoot, path), info.size)
+      if (digest === null) continue
+      digests.set(path, digest)
+      if (recorded?.digest === digest) {
+        unchanged += 1
+        // Touched but unchanged: refresh the stat cache so the next pass answers without reading.
+        touchIndexState(database, projectId, path, info.size, info.modifiedAt, Date.now())
+      } else {
+        changed.push(path)
+      }
     }
   }
 
@@ -116,6 +140,9 @@ export async function indexProject(
     })
     removed += 1
   }
+
+  const scan = Date.now() - startedScan
+  const startedParse = Date.now()
 
   const pool = options.pool ?? new ParsePool()
   let skipped = 0
@@ -153,7 +180,16 @@ export async function indexProject(
     if (options.pool === undefined) await pool.dispose()
   }
 
-  resolveEdges(database, projectId, affected(database, projectId, changed))
+  const parse = Date.now() - startedParse
+  const startedEdges = Date.now()
+
+  // One read of the index for both passes. Each used to load the whole table and JSON-parse every
+  // reference list of its own accord, so a delta on a large repository paid for the corpus twice
+  // before touching the one file that had actually changed.
+  const indexed = indexedFiles(database, projectId)
+  resolveEdges(database, projectId, affected(indexed, changed), indexed)
+
+  const edgesMs = Date.now() - startedEdges
 
   const size = graphSize(database, projectId)
   return {
@@ -162,6 +198,7 @@ export async function indexProject(
     nodes: size.nodes,
     removed,
     skipped,
+    spent: { edges: edgesMs, parse, scan },
     unchanged,
     updated,
     yielded,
@@ -227,10 +264,9 @@ function persist(
  * A file that imports a changed file may now resolve a call it could not resolve before, so its
  * edges are recomputed too. Everything else keeps the edges it already has.
  */
-function affected(database: Database, projectId: string, changed: readonly string[]): string[] {
+function affected(files: Map<string, IndexedFile>, changed: readonly string[]): string[] {
   if (changed.length === 0) return []
 
-  const files = indexedFiles(database, projectId)
   const result = new Set(changed)
   // A set, not the array: this is a lookup inside a loop over every file, and a linear scan here
   // makes a first index quadratic in the size of the repository.
@@ -249,10 +285,14 @@ function affected(database: Database, projectId: string, changed: readonly strin
   return [...result]
 }
 
-function resolveEdges(database: Database, projectId: string, paths: readonly string[]): void {
+function resolveEdges(
+  database: Database,
+  projectId: string,
+  paths: readonly string[],
+  files: Map<string, IndexedFile>,
+): void {
   if (paths.length === 0) return
 
-  const files = indexedFiles(database, projectId)
   const edges: GraphEdge[] = []
 
   for (const path of paths) {

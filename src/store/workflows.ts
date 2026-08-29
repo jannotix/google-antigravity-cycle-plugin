@@ -54,6 +54,36 @@ export function createWorkflow(
   return { id, requestDigest }
 }
 
+/** The digest a request will be stored under, so a caller can look one up before creating it. */
+export function requestDigestOf(originalText: string): string {
+  return digest(DIGEST_DOMAIN.request, { attachments: [], text: originalText })
+}
+
+/**
+ * A workflow already running for this exact request. `start` is relayed through an agent, and a
+ * relay that loses the response will send it again: without this the second call mints a second
+ * workflow, and the run silently forks. Terminal workflows are excluded so the same request can be
+ * run again deliberately once the first one is finished.
+ */
+export function activeWorkflowForRequest(
+  database: Database,
+  projectId: string,
+  requestDigest: string,
+): StoredWorkflow | undefined {
+  const row = database.get<Row>(
+    `select workflows.* from workflows
+       join requests on requests.workflow_id = workflows.id
+      where workflows.project_id = ?
+        and requests.digest = ?
+        and workflows.state not in ('cancelled', 'completed')
+      order by workflows.created_at desc
+      limit 1`,
+    projectId,
+    requestDigest,
+  )
+  return row === undefined ? undefined : toWorkflow(row)
+}
+
 export function loadWorkflow(database: Database, id: string): StoredWorkflow | undefined {
   const row = database.get<Row>("select * from workflows where id = ?", id)
   return row === undefined ? undefined : toWorkflow(row)
@@ -313,6 +343,36 @@ export function loadReviews(
       role: String(row["role"]),
       verdict: JSON.parse(String(row["verdict"])) as Verdict,
     }))
+}
+
+/**
+ * What the last refusal actually said, so the role about to repair is told rather than left to
+ * rediscover it. Keyed by workflow rather than by candidate, because `begin_repair` clears the
+ * candidate: the findings belong to the candidate that was refused, and the repair happens after it
+ * is gone. Reviews that approved are omitted — an approval names nothing to fix.
+ */
+export function lastRefusal(
+  database: Database,
+  workflowId: string,
+): { findings: readonly unknown[]; from: string }[] {
+  const arbitration = database.get<Row>(
+    `select candidate_id, verdict from arbitrations
+      where workflow_id = ? and decision = 'rejected'
+      order by finalized_at desc limit 1`,
+    workflowId,
+  )
+  if (arbitration === undefined) return []
+
+  const candidateId = String(arbitration["candidate_id"])
+  const refusals: { findings: readonly unknown[]; from: string }[] = []
+  for (const review of loadReviews(database, candidateId)) {
+    if (review.verdict.decision !== "rejected") continue
+    refusals.push({ findings: review.verdict.findings ?? [], from: review.role })
+  }
+
+  const verdict = JSON.parse(String(arbitration["verdict"])) as Verdict
+  refusals.push({ findings: verdict.findings ?? [], from: "arbiter" })
+  return refusals.filter((refusal) => refusal.findings.length > 0)
 }
 
 export function recordArbitration(

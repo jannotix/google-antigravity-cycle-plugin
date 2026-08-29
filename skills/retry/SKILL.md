@@ -5,7 +5,7 @@ description: Extend the repair budget of a blocked Cycle workflow by one cycle s
 
 Retry a blocked workflow: $ARGUMENTS
 
-1. Call `mcp__plugin_cycle_control__workflow` with `{"operation": "status"}` to find the workflow
+1. Call `cycle-control/workflow` with `{"operation": "status"}` to find the workflow
    and confirm it is `blocked`.
 2. If it is not blocked, say what state it is in and what continues it — `/cycle:run` for a run in
    progress, `/cycle:resume` for a paused one. Do not extend a budget nothing is waiting on.

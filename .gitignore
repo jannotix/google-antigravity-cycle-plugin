@@ -5,8 +5,11 @@ Cargo.lock
 
 # Node / TypeScript
 node_modules/
-dist/
 *.tsbuildinfo
+
+# Reproducible release output
+build/
+certification-artifacts/
 
 # OS / Editor
 .DS_Store

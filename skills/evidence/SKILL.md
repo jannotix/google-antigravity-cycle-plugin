@@ -5,7 +5,7 @@ description: The gates recorded against the current frozen candidate — which r
 
 Report recorded evidence: $ARGUMENTS
 
-1. Call `mcp__plugin_cycle_control__workflow` with `{"operation": "evidence"}` and the `workflowId`
+1. Call `cycle-control/workflow` with `{"operation": "evidence"}` and the `workflowId`
    if `$ARGUMENTS` names one; otherwise call `{"operation": "status"}` first to find the current one.
 2. If there is no frozen candidate, say so: gates run against a candidate, and until one is frozen
    there is nothing for them to run against.

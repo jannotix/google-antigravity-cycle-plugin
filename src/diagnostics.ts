@@ -1,10 +1,11 @@
 import { constants } from "node:fs"
-import { access, mkdir, readFile, statfs } from "node:fs/promises"
+import { access, mkdir, readFile, stat, statfs } from "node:fs/promises"
 import { freemem } from "node:os"
-import { isAbsolute, relative } from "node:path"
+import { isAbsolute, join, relative } from "node:path"
 
 import { INHERIT, ROLES, type Configuration, type Role } from "./config.ts"
 import { probeVersion, type ExecutableKind } from "./exec.ts"
+import { subagentModelFor } from "./roles.ts"
 import { settingsPath } from "./paths.ts"
 import { describeProviders, type RoleProvider } from "./providers.ts"
 import type { Runtime } from "./runtime.ts"
@@ -14,7 +15,7 @@ import { verifyHistory } from "./store/history.ts"
 import { graphSize } from "./store/graph.ts"
 import { CURRENT_SCHEMA_VERSION } from "./store/migrations.ts"
 
-const MINIMUM_NODE_MAJOR = 22
+const MINIMUM_NODE_MAJOR = 26
 const MEMORY_RESERVE_BYTES = 1024 ** 3
 const DISK_RESERVE_BYTES = 2 * 1024 ** 3
 const PROBE_TIMEOUT_MS = 4_000
@@ -35,6 +36,8 @@ export interface PackageManager {
 
 export interface DoctorReport {
   readonly configuration: {
+    readonly blank: number
+    readonly delivered: number
     readonly gateStrictness: string
     readonly maxRepairCycles: number
     readonly roles: Readonly<Record<Role, { effort: string; model: string }>>
@@ -57,6 +60,14 @@ export interface DoctorReport {
     readonly node: string
     readonly packageManagers: readonly PackageManager[]
     readonly platform: string
+    /**
+     * How long this server process has been answering. The configuration reaches it once, in the
+     * environment it was given at spawn, so a process older than the last change to that
+     * configuration is reporting what was true when it started. The version says which build is
+     * running and answers nothing about when — reading freshness out of it has produced the wrong
+     * conclusion in both directions.
+     */
+    readonly startedMinutesAgo: number
     readonly wsl: boolean
   }
   readonly storage: {
@@ -72,6 +83,22 @@ export interface DoctorReport {
     readonly schemaVersion: number | null
   }
   readonly version: string
+}
+
+/** Best-effort: a diagnostic that fails because its own counter file is missing tells nobody anything. */
+async function guardAttribution(
+  dataDirectory: string,
+): Promise<{ attributed: number; unattributed: number } | null> {
+  try {
+    const raw = await readFile(join(dataDirectory, "guard-attribution.json"), "utf8")
+    const parsed = JSON.parse(raw) as { attributed?: number; unattributed?: number }
+    return {
+      attributed: Number(parsed.attributed ?? 0),
+      unattributed: Number(parsed.unattributed ?? 0),
+    }
+  } catch {
+    return null
+  }
 }
 
 export async function diagnose(
@@ -92,12 +119,66 @@ export async function diagnose(
     findings.push({ code: "config.invalid", message: problem, severity: "error" })
   }
 
+  // A server holds the environment it was given at spawn, so one older than the last write to the
+  // settings file is answering with what was true then. Saying it only when it is true keeps it out
+  // of the reader's way the rest of the time, and puts a measurement where a guess has twice gone
+  // the wrong way.
+  // Both sides used to be floored to whole minutes, so during this process's first minute the
+  // comparison read 0 < 0 and the warning disappeared exactly when a settings edit was freshest.
+  // Comparing the instants keeps it honest at any age.
+  const settingsWritten = await writtenAt(settingsPath(environment))
+  const processStarted = Date.now() - process.uptime() * 1000
+  if (settingsWritten !== null && settingsWritten > processStarted) {
+    const settingsChanged = Math.max(0, Math.floor((Date.now() - settingsWritten) / 60_000))
+    findings.push({
+      code: "runtime.stale_configuration",
+      message:
+        `The settings file was written ${settingsChanged} minutes ago and this server started ` +
+        `${runtime.startedMinutesAgo} minutes ago, so it is answering with the configuration as it ` +
+        "stood before that change. Reload the plugins or restart to pick it up; nothing below " +
+        "reflects the newer settings.",
+      severity: "warn",
+    })
+  }
+
+  if (configuration.delivered === 0) {
+    findings.push({
+      code: "config.undelivered",
+      message:
+        (configuration.blank > 0
+          ? `All ${configuration.blank} option variables reached this process empty, so the host ` +
+            "resolved none of the values configured for this plugin. "
+          : "No plugin option reached this process. ") +
+        "Nothing configured here is being applied: every role is running on the session model and " +
+        "the defaults below are in force.",
+      severity: "warn",
+    })
+  }
+
   if (configuration.unknown.length > 0) {
     findings.push({
       code: "config.unknown",
       message:
         `These options are set but this build does not read them, so they change nothing: ` +
         `${configuration.unknown.join(", ")}.`,
+      severity: "warn",
+    })
+  }
+
+  // Layer two of the separation of powers identifies a role from fields the host supplies. If those
+  // fields are renamed it recognises nothing, treats every call as the user's own session, and stops
+  // being a boundary without failing — which is exactly the kind of silence this product exists to
+  // refuse. The guard counts what it attributed; a long run of calls with no role recognised is what
+  // that blindness looks like from outside.
+  const attribution = await guardAttribution(storage.dataDirectory)
+  if (attribution !== null && attribution.unattributed >= 20 && attribution.attributed === 0) {
+    findings.push({
+      code: "guard.unattributed",
+      message:
+        `The role guard has seen ${attribution.unattributed} tool calls and recognised a Cycle ` +
+        "role in none of them. Either no governed cycle has run on this installation, or the host " +
+        "changed the payload fields the guard reads and the second of the three separation layers " +
+        "is no longer enforcing anything. The first and third layers do not depend on it.",
       severity: "warn",
     })
   }
@@ -116,6 +197,8 @@ export async function diagnose(
 
   return {
     configuration: {
+      blank: configuration.blank,
+      delivered: configuration.delivered,
       gateStrictness: configuration.gateStrictness,
       maxRepairCycles: configuration.maxRepairCycles,
       roles,
@@ -189,6 +272,12 @@ function probeIntegrity(cycle: Runtime, findings: Finding[]): void {
   }
 }
 
+/** "a and b" for two, "a, b and c" beyond that: the warning is read, not parsed. */
+function listed(items: readonly string[]): string {
+  if (items.length < 3) return items.join(" and ")
+  return `${items.slice(0, -1).join(", ")} and ${items.at(-1)}`
+}
+
 function probeStore(cycle: Runtime, findings: Finding[]): DoctorReport["store"] {
   const database = cycle.store()
   if (database === undefined) {
@@ -217,6 +306,16 @@ function probeStore(cycle: Runtime, findings: Finding[]): DoctorReport["store"] 
     historyEntries: row?.entries ?? 0,
     mode: database.mode,
     schemaVersion: database.schemaVersion,
+  }
+}
+
+/** How long ago a file was last written, or null when it cannot be read. */
+/** When the file was last written, or null when it is not there to be read. */
+async function writtenAt(path: string): Promise<number | null> {
+  try {
+    return (await stat(path)).mtimeMs
+  } catch {
+    return null
   }
 }
 
@@ -249,6 +348,7 @@ async function probeRuntime(findings: Finding[]): Promise<DoctorReport["runtime"
 
   return {
     arch: process.arch,
+    startedMinutesAgo: Math.floor(process.uptime() / 60),
     git: git?.version ?? null,
     node: process.versions.node,
     packageManagers,
@@ -313,16 +413,7 @@ async function probeModels(
   environment: NodeJS.ProcessEnv,
   findings: Finding[],
 ): Promise<DoctorReport["models"]> {
-  const subagentModelOverride = environment["CLAUDE_CODE_SUBAGENT_MODEL"]?.trim() || null
-  if (subagentModelOverride !== null) {
-    findings.push({
-      code: "models.override",
-      message:
-        `CLAUDE_CODE_SUBAGENT_MODEL is set to "${subagentModelOverride}". It overrides every role ` +
-        "assignment, so the roles are not running on the models configured here.",
-      severity: "warn",
-    })
-  }
+  const subagentModelOverride = null
 
   const paths = describeProviders(configuration, environment)
 
@@ -330,8 +421,7 @@ async function probeModels(
     findings.push({
       code: "models.credential",
       message:
-        `${paths.credentialVariable} is set, so it replaces the saved login for this session and ` +
-        "every role is billed per token to that credential rather than to a Claude subscription.",
+        `${paths.credentialVariable} is set, so it changes how the host authenticates this session.`,
       severity: "warn",
     })
   }
@@ -340,10 +430,7 @@ async function probeModels(
     findings.push({
       code: "models.unroutable",
       message:
-        `${paths.unroutable.join(", ")} names a provider, but ANTHROPIC_BASE_URL is not set to a ` +
-        "gateway, so the request goes to the Anthropic API, which does not serve it. Either point " +
-        "the session at a gateway that routes these names, or configure a model the session can " +
-        "reach.",
+        `Antigravity cannot serve these configured model tiers: ${paths.unroutable.join(", ")}.`,
       severity: "warn",
     })
   }
@@ -372,7 +459,7 @@ async function probeModels(
       findings.push({
         code: "models.allowlist",
         message:
-          `availableModels does not permit ${blocked.join(", ")}. Claude Code substitutes a ` +
+          `availableModels does not permit ${blocked.join(", ")}. Antigravity may substitute a ` +
           "different model, so the configured assignment is not what runs.",
         severity: "warn",
       })
@@ -394,6 +481,60 @@ async function probeModels(
             "make the reviews genuinely independent."
           : "Both reviewers and the arbiter use the same model. Correlated model errors are more " +
             "likely than the three-verdict structure suggests.",
+      severity: "warn",
+    })
+  }
+
+  // Antigravity exposes the native inherit, flash and pro tiers. The check below keeps a future
+  // host change from silently collapsing two distinct configured tiers into one runtime choice.
+  const advisory: readonly Role[] = [
+    "architect",
+    "executor",
+    "functional_reviewer",
+    "security_reviewer",
+    "arbiter",
+  ]
+  const collapsed = new Map<string, { model: string; role: Role }[]>()
+  const inexpressible: string[] = []
+  for (const role of advisory) {
+    const model = configuration.roles[role].model
+    if (model === INHERIT) continue
+    const alias = subagentModelFor(model)
+    if (alias === null) {
+      inexpressible.push(`${role} (${model})`)
+      continue
+    }
+    collapsed.set(alias, [...(collapsed.get(alias) ?? []), { model, role }])
+  }
+
+  // Two roles set to the same model is a decision, not a surprise, and saying otherwise trains the
+  // reader to skip warnings. What is worth saying is that two models chosen to differ arrive as one.
+  const JUDGES: readonly Role[] = ["arbiter", "functional_reviewer", "security_reviewer"]
+  for (const [alias, entries] of collapsed) {
+    if (new Set(entries.map((entry) => entry.model)).size < 2) continue
+    const roles = entries.map((entry) => entry.role)
+    const judging = roles.filter((role) => JUDGES.includes(role))
+    findings.push({
+      code: "models.subagent_collapse",
+      message:
+        `${listed(roles)} are configured to different tiers that invoke_subagent cannot tell ` +
+        `apart: each reaches it as "${alias}". ` +
+        (judging.length > 1
+          ? `In the advisory commands ${listed(judging)} therefore return verdicts from one model, ` +
+            "not from the separate ones the configuration names. "
+          : "In the advisory commands they run on one model rather than the separate ones " +
+            "configured. ") +
+        "Use distinct native tiers where Antigravity exposes them.",
+      severity: "warn",
+    })
+  }
+
+  if (inexpressible.length > 0) {
+    findings.push({
+      code: "models.subagent_unavailable",
+      message:
+        `Antigravity invoke_subagent cannot express ${inexpressible.join(", ")}; those roles ` +
+        "fall back to the session model.",
       severity: "warn",
     })
   }

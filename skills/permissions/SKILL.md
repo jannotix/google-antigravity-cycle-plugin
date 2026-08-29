@@ -5,7 +5,7 @@ description: The immutable boundaries between the Cycle roles — who may write,
 
 Report the role boundaries: $ARGUMENTS
 
-1. Call `mcp__plugin_cycle_control__permissions`.
+1. Call `cycle-control/permissions`.
 2. Print one row per role from `boundaries`: the role, whether it writes, what it may do, and the
    tools it is denied.
 3. State the three `enforcement` layers, each on its own line, verbatim.

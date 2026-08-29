@@ -5,7 +5,7 @@ description: Stop the current Cycle workflow at the next safe boundary, keeping 
 
 Pause the workflow: $ARGUMENTS
 
-1. Call `mcp__plugin_cycle_control__workflow` with `{"operation": "status"}` to find the workflow if
+1. Call `cycle-control/workflow` with `{"operation": "status"}` to find the workflow if
    `$ARGUMENTS` does not name one.
 2. Call `{"operation": "control", "controlOperation": "pause", "workflowId": "..."}`.
 3. Report the returned `state`, and say that `/cycle:resume` returns it to exactly where it stopped.

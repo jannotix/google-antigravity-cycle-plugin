@@ -5,7 +5,7 @@ description: Read the project's append-only history, or verify its hash chain an
 
 Read or verify the project history: $ARGUMENTS
 
-1. Call `mcp__plugin_cycle_control__workflow` with `{"operation": "history", "limit": 50}`. Pass
+1. Call `cycle-control/workflow` with `{"operation": "history", "limit": 50}`. Pass
    `after` to page forward from a sequence number.
 2. Report `chain` and `signatures` **first**, before any entry. A record that does not verify is not
    a record.

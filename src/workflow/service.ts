@@ -1,4 +1,7 @@
 import { release } from "../admission.ts"
+import { issueCaptureCapabilities, redeemCaptureCapability } from "../store/capabilities.ts"
+import { ROLES, type Configuration } from "../config.ts"
+import { resolveRole } from "../roles.ts"
 import { advanceGoalOfWorkflow, linkStartedWorkflow } from "../goals.ts"
 import { captureBlocked, captureDelivery, recall } from "../memory.ts"
 import { parseSnapshot } from "../evidence/accessibility.ts"
@@ -10,19 +13,22 @@ import {
   promote,
   recoverDelivery,
 } from "../evidence/delivery.ts"
-import { browserEvidence } from "../evidence/browser.ts"
+import { browserEvidence, type CapturedBy } from "../evidence/browser.ts"
 import type { VerificationOutcome } from "../evidence/gates.ts"
 import { proofEvidence, proofGateName } from "../evidence/proof-evidence.ts"
 import { runProof, type ProofRequest } from "../evidence/proof.ts"
 import { loadEvidence, recordEvidence } from "../store/evidence.ts"
 import { latestCheckpoint, signCheckpoint, verifyCheckpoints } from "../store/checkpoints.ts"
 import { appendHistory, lastEvent, readHistory, verifyHistory } from "../store/history.ts"
-import type { Database } from "../store/database.ts"
+import type { Database, Row } from "../store/database.ts"
+import { goalOfWorkflow } from "../store/goals.ts"
 import { newId } from "../store/ids.ts"
 import {
+  activeWorkflowForRequest,
   candidateManifest,
   createWorkflow,
   frozenFiles,
+  lastRefusal,
   latestWorkflow,
   loadPlan,
   loadRequest,
@@ -31,6 +37,7 @@ import {
   loadWorkflow,
   recordArbitration,
   recordCandidate,
+  requestDigestOf,
   saveWorkflow,
   savePlan,
   setTaskState,
@@ -44,6 +51,8 @@ import { insideAny } from "./scopes.ts"
 import { parseVerdict, type Verdict } from "./verdicts.ts"
 
 export interface ServiceContext {
+  /** Carried so `start` can state the per-role configuration rather than be told it. */
+  readonly configuration: Configuration
   readonly database: Database
   readonly dataDirectory: string
   readonly maxRepairCycles: number
@@ -57,6 +66,41 @@ export class WorkflowError extends Error {
   }
 }
 
+/**
+ * The per-role configuration, returned by `start` so the run never depends on its caller having
+ * assembled it. The skill is told to call `role_settings` once per role and pass a map; when that
+ * preamble is skipped the map arrives empty, every role inherits the session model, and nothing
+ * anywhere says so — the product's central promise fails silently. The plane holds the
+ * configuration, so the plane states it.
+ */
+function roleModels(configuration: Configuration): Record<string, WorkflowRoleSetting> {
+  const roles: Record<string, WorkflowRoleSetting> = {}
+  for (const role of ROLES) {
+    const resolved = resolveRole(configuration, role)
+    roles[WORKFLOW_ROLE_NAME[role] ?? role] = {
+      effort: resolved.effort,
+      model: resolved.model,
+      // The workflow runtime dispatches on the identifier as configured, which is what keeps a
+      // third-party model reachable at all. The family is carried for the advisory commands,
+      // which dispatch through a tool that accepts nothing else.
+      subagentModel: resolved.subagentModel,
+    }
+  }
+  return roles
+}
+
+export interface WorkflowRoleSetting {
+  readonly effort: string
+  readonly model: string | null
+  readonly subagentModel: string | null
+}
+
+/** The names the workflow script dispatches by, which differ from the stored role names. */
+const WORKFLOW_ROLE_NAME: Readonly<Record<string, string>> = {
+  functional_reviewer: "functional-reviewer",
+  security_reviewer: "security-reviewer",
+}
+
 export function startWorkflow(
   context: ServiceContext,
   request: string,
@@ -66,6 +110,43 @@ export function startWorkflow(
 ): unknown {
   const text = request.trim()
   if (!text) throw new WorkflowError("a workflow needs the user's exact request")
+
+  // A caller once handed over its whole argument list as the request:
+  // `request="add a discount..." workflowId="e84cde16-..."`. That opened a second workflow on a
+  // mangled sentence and orphaned the real one, and the arbiter would have judged the delivered
+  // work against the serialisation rather than against what the user asked for. Nothing legitimate
+  // begins this way, so it is refused rather than tidied up: a request the plane silently repaired
+  // is a request nobody can be held to.
+  if (/^request\s*=/iu.test(text)) {
+    throw new WorkflowError(
+      "that request is an argument list, not a request: it begins with `request=`. Pass the user's " +
+        "sentence itself as `request`. The arbiter judges the delivered work against this text, so " +
+        "a serialisation here would be judged literally.",
+    )
+  }
+
+  // A relayed start whose response was lost comes back as an identical call. Rejoining the run it
+  // already created is the only safe answer: a second workflow would fork the work, and both halves
+  // would look healthy while neither was the whole.
+  const existing = activeWorkflowForRequest(
+    context.database,
+    context.projectId,
+    requestDigestOf(text),
+  )
+  if (existing !== undefined) {
+    const decision = route(text, affectedPaths, preference)
+    return {
+      critical: decision.critical,
+      goalId: goalOfWorkflow(context.database, existing.id) ?? null,
+      mode: existing.mode ?? decision.mode,
+      rationale: decision.rationale,
+      requestDigest: requestDigestOf(text),
+      resumed: true,
+      roles: roleModels(context.configuration),
+      state: existing.state,
+      workflowId: existing.id,
+    }
+  }
 
   const { id, requestDigest } = createWorkflow(
     context.database,
@@ -94,9 +175,55 @@ export function startWorkflow(
     mode: decision.mode,
     rationale: decision.rationale,
     requestDigest,
+    resumed: false,
+    roles: roleModels(context.configuration),
     state: workflow.state,
     workflowId: id,
   }
+}
+
+/**
+ * One line, built from the record, that says what actually happened. It exists because the layer
+ * that tells the user about a run is prose written by a model, and prose drifts: a workflow stopped
+ * in delivery on the quick route with no reviews has been reported as "completed, full cycle, seven
+ * agents", and work done outside the cycle entirely has been reported as ready. The plane cannot
+ * stop a caller paraphrasing, but it can hand it a sentence that is either quoted exactly or
+ * visibly not quoted at all.
+ */
+function recordSummary(context: ServiceContext, workflow: StoredWorkflow): string {
+  const database = context.database
+  const counted = (table: string, column: string): number => {
+    const row = database.get<Row>(
+      `select count(*) as total from ${table} where ${column} = ?`,
+      workflow.id,
+    )
+    return Number(row?.["total"] ?? 0)
+  }
+
+  const tasks = loadTasks(database, workflow.id)
+  const done = tasks.filter((task) => task.state === "completed").length
+  const delivered = counted("deliveries", "workflow_id") > 0
+
+  return [
+    `route ${workflow.mode ?? "unrouted"}`,
+    `state ${workflow.state}`,
+    `tasks ${done}/${tasks.length}`,
+    `reviews ${counted("reviews", "workflow_id")}`,
+    `arbitrations ${counted("arbitrations", "workflow_id")}`,
+    `repair ${workflow.repairCycles}/${workflow.maxRepairCycles}`,
+    delivered ? "delivered" : "not delivered",
+    // A run whose plane received no option at all is running on the session model for every role,
+    // whatever the user configured. The doctor says so; a run said nothing, so a stale server was
+    // indistinguishable from a deliberate choice to inherit. It rides the line every report quotes.
+    // The workflow script matches on this prefix, so both shapes of the failure keep it verbatim.
+    ...(context.configuration.delivered === 0
+      ? [
+          context.configuration.blank > 0
+            ? `no plugin option reached this process with a value (${context.configuration.blank} arrived empty)`
+            : "no plugin option reached this process",
+        ]
+      : []),
+  ].join(" · ")
 }
 
 export function workflowStatus(context: ServiceContext, workflowId?: string): unknown {
@@ -109,11 +236,19 @@ export function workflowStatus(context: ServiceContext, workflowId?: string): un
   const request = loadRequest(context.database, workflow.id)
   return {
     found: true,
+    // What the last refusal said, carried so a repair is aimed rather than blind. Empty until
+    // something has actually been refused.
+    lastRefusal: lastRefusal(context.database, workflow.id),
     mode: workflow.mode,
     originalRequest: request?.originalText ?? null,
     pausedBecause: pausedBecause(context, workflow),
     repair: { max: workflow.maxRepairCycles, used: workflow.repairCycles },
     requestDigest: request?.digest ?? null,
+    // Quoted verbatim by every skill that reports a run, so a paraphrase is visible as one.
+    summary: recordSummary(context, workflow),
+    // Which model each role is set to run on, so "were my models used" is a question the plane
+    // answers rather than one the user has to reconstruct from a transcript.
+    roles: roleModels(context.configuration),
     state: workflow.state,
     tasks: loadTasks(context.database, workflow.id).map((task) => ({
       key: task.key,
@@ -164,12 +299,28 @@ export function reportTask(
   key: string,
   status: "blocked" | "completed" | "plan_defect",
   summary: string,
-  changedPaths: readonly string[] = [],
+  /**
+   * What the worktree says this task wrote, or null when git could not be read at all. Null is not
+   * an empty change set: flattening the two is how a transient git failure let a task with
+   * out-of-scope writes report as completed, with the scope gate never running.
+   */
+  changedPaths: readonly string[] | null = [],
   now = Date.now(),
 ): unknown {
   const workflow = load(context, workflowId)
 
   if (status === "completed") {
+    if (changedPaths === null) {
+      record(context, workflowId, "execution.change_set_unreadable", { task: key })
+      return {
+        reason:
+          "the change set could not be read, so this task's writes cannot be reconciled against " +
+          "the scopes the plan authorized. Nothing has been recorded as completed. Report the " +
+          "task again.",
+        retry: true,
+        state: workflow.state,
+      }
+    }
     const violations = outOfScope(context, workflowId, key, changedPaths)
     if (violations.length !== 0) {
       setTaskState(context.database, workflowId, key, "blocked", now)
@@ -183,12 +334,19 @@ export function reportTask(
         { target: "execution", type: "execution_failed" },
         now,
       )
+      const pending = pendingOwners(context, workflowId, key, violations)
       return {
         outOfScope: violations,
         reason:
-          `the task changed ${violations.length} path(s) outside every write scope the plan ` +
-          "authorized",
+          pending.length === 0
+            ? `the task changed ${violations.length} path(s) outside every write scope the plan ` +
+              "authorized"
+            : `the task changed path(s) owned by ${pending.join(", ")}, which have not been ` +
+              "reported yet. Report each task as it is completed, before starting the next one. " +
+              "Do not move the changes aside to get past this: the paths are authorized, the " +
+              "order is not.",
         state: next.state,
+        unreportedTasks: pending,
       }
     }
   }
@@ -219,6 +377,26 @@ export function reportTask(
  * to keep in step. A quick-route workflow has no plan and therefore authorizes nothing here; its
  * candidate is bounded by the freeze and the gates instead.
  */
+/**
+ * Of the violating paths, the tasks that do authorize them but have not been reported. The
+ * distinction matters at the point of refusal: "no task may touch this" and "this task may not
+ * touch it yet" call for opposite responses, and a caller told the first when the second is true
+ * will move the files aside rather than report the work in order.
+ */
+function pendingOwners(
+  context: ServiceContext,
+  workflowId: string,
+  key: string,
+  violations: readonly string[],
+): string[] {
+  const owners = new Set<string>()
+  for (const task of loadTasks(context.database, workflowId)) {
+    if (task.key === key || task.state === "completed") continue
+    if (violations.some((path) => insideAny(path, task.writeScopes))) owners.add(task.key)
+  }
+  return [...owners].sort()
+}
+
 function outOfScope(
   context: ServiceContext,
   workflowId: string,
@@ -257,6 +435,9 @@ export function freezeCandidate(
     baseRevision: captured.manifest.baseRevision,
     candidateDigest,
     candidateId,
+    // One secret per reviewing role, returned exactly once. The run hands each to that role alone,
+    // which is what lets the plane know who captured a flow instead of being told.
+    captureCapabilities: issueCaptureCapabilities(context.database, workflowId, candidateId, now),
     files: captured.manifest.files.length,
     state: next.state,
   }
@@ -369,6 +550,9 @@ export async function reconcile(
     delivery: deliveryOf(context.database, workflow.id) ?? null,
     found: true,
     next: NEXT_ACTION[current.state],
+    // Carried so that continuing a run does not require the user to retype the request the arbiter
+    // will judge it against. Retyping it is how a requirement gets silently rewritten.
+    originalRequest: loadRequest(context.database, workflow.id)?.originalText ?? null,
     pausedBecause: pausedBecause(context, current),
     recovered,
     repair: { max: current.maxRepairCycles, used: current.repairCycles },
@@ -502,7 +686,14 @@ export function verifyCandidate(
  */
 export function candidateEvidence(context: ServiceContext, workflowId: string): unknown {
   const workflow = load(context, workflowId)
-  if (workflow.candidateId === null) return { candidate: null, evidence: [] }
+  // The requirement identifiers a verdict is allowed to cite. A reviewer is asked to decide every
+  // requirement in the plan and a verdict citing an identifier the plan does not contain is
+  // refused, so the plan's own identifiers are handed out with the evidence rather than left to be
+  // guessed. A quick-route workflow has no plan and therefore no matrix: the list is empty and the
+  // arbiter judges the original request directly.
+  const requirements = loadPlan(context.database, workflowId)?.requirements.map((entry) => entry.id) ?? []
+
+  if (workflow.candidateId === null) return { candidate: null, evidence: [], requirements }
   return {
     candidate: workflow.candidateId,
     evidence: loadEvidence(context.database, workflow.candidateId).map((item) => ({
@@ -512,6 +703,7 @@ export function candidateEvidence(context: ServiceContext, workflowId: string): 
       reason: item.skipReason,
       status: item.status,
     })),
+    requirements,
   }
 }
 
@@ -566,6 +758,13 @@ export function submitBrowserEvidence(
   context: ServiceContext,
   workflowId: string,
   raw: unknown,
+  /**
+   * The secret issued to a reviewing role when the candidate was frozen. No token means the
+   * executor reporting its own work, which is recorded and carries no weight. A token that does not
+   * redeem is refused outright rather than quietly downgraded: something tried to authenticate and
+   * failed, and treating that as an ordinary self-report would hide it.
+   */
+  captureToken: string | null = null,
   now = Date.now(),
 ): unknown {
   const workflow = load(context, workflowId)
@@ -576,11 +775,25 @@ export function submitBrowserEvidence(
   }
   const candidateId = requireCandidate(workflow)
 
+  let capturedBy: CapturedBy = "executor"
+  if (captureToken !== null) {
+    const redeemed = redeemCaptureCapability(context.database, candidateId, captureToken, now)
+    if (redeemed.role === null) {
+      throw new WorkflowError(
+        `this capture capability is ${redeemed.reason === "consumed" ? "already spent" : "not valid for this candidate"}. ` +
+          "It is issued to one reviewing role when the candidate is frozen and can be spent once. " +
+          "Submit without it to record a self-reported capture, which carries no weight.",
+      )
+    }
+    capturedBy = redeemed.role
+  }
+
   const snapshot = parseSnapshot(raw)
-  const { evidence, findings } = browserEvidence(snapshot, now)
+  const { evidence, findings } = browserEvidence(snapshot, capturedBy, now)
   recordEvidence(context.database, candidateId, evidence, (item) => item.gate.mandatory)
 
   record(context, workflowId, "browser.captured", {
+    capturedBy,
     findings: String(findings.length),
     flow: snapshot.capturedFlow.slice(0, 200),
     url: snapshot.url.slice(0, 500),
@@ -588,6 +801,8 @@ export function submitBrowserEvidence(
 
   return {
     accessibility: findings,
+    // Said back, so a caller learns what its submission was credited as rather than assuming.
+    capturedBy,
     evidenceIds: evidence.map((item) => item.id),
     state: workflow.state,
   }
@@ -608,6 +823,15 @@ export async function submitSecurityProof(
   if (workflow.state !== "independent_reviews" && workflow.state !== "arbitration") {
     throw new WorkflowError(
       `a proof is run while the candidate is under review, not in ${workflow.state}`,
+    )
+  }
+  if (!context.configuration.securityProofs) {
+    throw new WorkflowError(
+      "executing a proof is off. A proof runs code supplied by the reviewer against a copy of the " +
+        "candidate, with this account's privileges and no operating-system sandbox, so it is " +
+        "enabled deliberately: set the plugin's security_proofs option to on. Until then, state " +
+        "the vulnerability and the reasoning in the review; an undemonstrated critical is " +
+        "downgraded, not discarded.",
     )
   }
   const candidateId = requireCandidate(workflow)
