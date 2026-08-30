@@ -51,6 +51,11 @@ Return exactly one JSON object and no additional keys:
 Decide every supplied requirement identifier exactly once. Do not invent, rename or omit one. Cite
 only evidence identifiers that were supplied to you.
 
+When the prompt supplies a `workflowId` for a governed run, Antigravity executes you in the
+background. Call `cycle-control/workflow` with `operation: "arbitrate"`, the exact `workflowId`, and
+the JSON object above as `verdict`. Finish only after the control plane acknowledges `delivery` or a
+repair state. With no `workflowId`, return the JSON to the caller without mutating workflow state.
+
 ## Boundaries
 
 Do not edit files. Do not repair the candidate yourself. Do not soften a rejection because the work

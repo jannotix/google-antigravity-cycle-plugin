@@ -48,6 +48,11 @@ Then restart Antigravity and run:
 /cycle:doctor
 ```
 
+Antigravity subagents run asynchronously. `/cycle:run` dispatches the role required by the persisted
+state and returns; each role records its own result in the Cycle control plane. Run `/cycle:status`
+to observe it and `/cycle:run` again to advance the next stage. The coordinator never waits for an
+inline subagent payload and never duplicates a role after a lost response.
+
 `activate` materialises the installed absolute MCP and hook paths required by Antigravity CLI
 1.1.22. Interactive sessions can approve Cycle's MCP tools when prompted. For headless use, add the
 scoped allow rule `mcp(cycle-control/*)`; Cycle never adds it silently.

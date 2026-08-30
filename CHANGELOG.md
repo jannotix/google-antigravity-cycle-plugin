@@ -13,6 +13,8 @@
 - Materialized MCP and hook entrypoints to absolute installed paths during lifecycle activation and
   declared the complete MCP tool allowlist required by Antigravity CLI 1.1.22.
 - Kept MCP diagnostics available when an existing Cycle SQLite store fails its integrity check.
+- Adapted governed roles to Antigravity's asynchronous subagent model: every role now persists its
+  own result and the coordinator advances only from durable workflow state.
 - Restricted model configuration to Antigravity's supported `inherit`, `flash` and `pro` tiers.
 
 ### Security

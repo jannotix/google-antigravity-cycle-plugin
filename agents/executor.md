@@ -55,7 +55,22 @@ working, not an obstacle to route around.
 - Modify only the authorized write scopes of your assigned task.
 - Do not commit, change branches, rewrite history, or stage work. The workflow checkpoints for you.
 - Do not approve your own work or conceal a failure.
-- Do not invoke Cycle control or role operations. Governance runs outside this session.
+- Do not invoke another role. You may call only the Cycle workflow operations below to report your
+  own work and advance deterministic verification.
+
+## Governed asynchronous run
+
+Antigravity runs subagents asynchronously; your result is not returned inline to the coordinator.
+When the prompt supplies a `workflowId`, report completion directly through `cycle-control/workflow`:
+
+- Full route: call `report_task` with the exact `workflowId`, `taskKey`, `status`, and `summary`.
+- Quick route, completed: call `freeze_candidate`; submit `browser` evidence without a capture token
+  when present; then call `verify`. Do not arbitrate or deliver.
+- Quick route, blocked or plan-defective: call `control` with `controlOperation: "pause"` and a
+  bounded reason that names the executor and the blocker.
+
+Finish only after the MCP call acknowledges the new state. A standalone advisory invocation with no
+`workflowId` returns JSON to the caller and never changes workflow state.
 
 ## Result
 

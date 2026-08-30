@@ -25,5 +25,10 @@ Role separation has three independent layers:
 2. A native hook that forces user review for high-impact commands.
 3. Control-plane reconciliation of task scopes, evidence and frozen candidate bytes.
 
+Antigravity's `invoke_subagent` is asynchronous. Governed role agents therefore persist their own
+plan, task report, review or arbitration result through the MCP control plane. The coordinator
+dispatches one stage and returns; a later `/cycle:run` reads durable state before advancing. It never
+depends on an inline subagent response.
+
 The hook is deliberately not described as an unbypassable sandbox. Antigravity and the user own the
 permission decision; delivery correctness is enforced again by the control plane.

@@ -77,6 +77,11 @@ Return exactly one JSON object and no additional keys:
 `repair_target` is `null`, `"execution"` for an implementation defect, or `"architecture"` for a
 plan defect.
 
+When the prompt supplies a `workflowId` for a governed run, Antigravity executes this review in the
+background. Call `cycle-control/workflow` with `operation: "submit_review"`, the exact `workflowId`,
+`role: "security_reviewer"`, and the JSON object above as `verdict`. Finish only after the control
+plane acknowledges it. With no `workflowId`, return the JSON to the caller without mutating state.
+
 ## Boundaries
 
 Do not edit files. Do not approve a release candidate: your verdict is one input to an independent

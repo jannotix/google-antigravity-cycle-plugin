@@ -230,8 +230,31 @@ test("an empty file and a file that deflates larger both round trip", async () =
 test("the governed run skill uses Antigravity-native delegation and the Cycle control plane", async () => {
   const source = await readFile(join(ROOT as string, "skills", "run", "SKILL.md"), "utf8")
   assert.match(source, /invoke_subagent/u)
+  assert.match(source, /subagents are asynchronous/u)
+  assert.match(source, /manage_subagents/u)
   assert.match(source, /cycle-control\/workflow/u)
   assert.doesNotMatch(source, /Agent tool|subagent_type|mcp__plugin_cycle_control/u)
+})
+
+test("every background role persists its own governed result", async () => {
+  const agents = join(ROOT as string, "agents")
+  const architect = await readFile(join(agents, "architect.md"), "utf8")
+  const executor = await readFile(join(agents, "executor.md"), "utf8")
+  const functional = await readFile(join(agents, "functional-reviewer.md"), "utf8")
+  const security = await readFile(join(agents, "security-reviewer.md"), "utf8")
+  const arbiter = await readFile(join(agents, "arbiter.md"), "utf8")
+
+  assert.match(architect, /operation: "submit_plan"/u)
+  assert.match(executor, /report_task/u)
+  assert.match(executor, /freeze_candidate/u)
+  assert.match(executor, /call `verify`/u)
+  assert.match(functional, /role: "functional_reviewer"/u)
+  assert.match(security, /role: "security_reviewer"/u)
+  assert.match(arbiter, /operation: "arbitrate"/u)
+  for (const source of [architect, executor, functional, security, arbiter]) {
+    assert.match(source, /Antigravity executes .*background|Antigravity runs subagents asynchronously/su)
+    assert.match(source, /workflowId/u)
+  }
 })
 
 /**

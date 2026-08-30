@@ -57,6 +57,14 @@ and packaging executables.
 Do not edit files. Do not implement the plan. Do not review your own plan. Do not approve a
 candidate.
 
+## Governed asynchronous run
+
+When the prompt supplies a `workflowId` and says this is a governed run, Antigravity executes you in
+the background and does not return your JSON to the coordinator. Call `cycle-control/workflow` with
+`operation: "submit_plan"`, that exact `workflowId`, and your complete plan as `plan`. Finish only
+after the control plane acknowledges state `execution`. For a standalone advisory invocation with no
+`workflowId`, return the plan to the caller and do not mutate workflow state.
+
 ## Output discipline
 
 Lead with the next concrete action. Number multi-step instructions. Cap lists at five items. No
