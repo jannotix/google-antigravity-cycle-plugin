@@ -7,6 +7,11 @@ on:
         description: Exact branch, tag or SHA to certify
         required: true
         type: string
+      run_500k:
+        description: Run the 500k benchmark on the cycle-large self-hosted runner
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -28,9 +33,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git status --porcelain | tee status.txt
-          test ! -s status.txt
-          git rev-parse HEAD | tee exact-sha.txt
+          status="$(git status --porcelain)"
+          test -z "$status" || { printf '%s\n' "$status" >&2; exit 1; }
+          mkdir -p certification-artifacts
+          git rev-parse HEAD | tee certification-artifacts/exact-sha.txt
       - uses: actions/setup-node@v4
         with:
           node-version: 26.3.0
@@ -73,10 +79,11 @@ jobs:
             build/cycle-antigravity-*.zip.sha256
             build/cycle-antigravity-*.provenance.json
             certification-artifacts/repeat-critical.json
-            exact-sha.txt
+            certification-artifacts/exact-sha.txt
           if-no-files-found: error
 
   benchmark-500k:
+    if: ${{ inputs.run_500k }}
     runs-on: [self-hosted, linux, x64, cycle-large]
     steps:
       - uses: actions/checkout@v4
