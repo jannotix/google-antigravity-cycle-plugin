@@ -18,4 +18,5 @@ a separate lane is completed. A missing lane is `BLOCKED`, not a pass inferred f
 
 The 500k lane uses an isolated Ubuntu runner, requires at least 6 GiB free memory and 15 GiB free
 disk before generating any fixture, and is hard-capped at 120 minutes. Its fixture contains 50,000
-semantic JavaScript files and 450,000 tracked fallback files, followed by cold and warm index passes.
+symbol-bearing JavaScript files and 450,000 syntax-only JavaScript files, followed by cold and warm
+index passes. Every generated file uses a supported grammar and must be counted by both passes.

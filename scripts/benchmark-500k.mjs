@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { statfsSync } from 'node:fs'
 import { freemem, tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 
 import { indexProject } from '../dist/intel/indexer.js'
 import { Database } from '../dist/store/database.js'
@@ -10,7 +10,7 @@ import { Database } from '../dist/store/database.js'
 const count = numberOption('--files', 500_000)
 const memoryFloor = numberOption('--minimum-free-memory-gib', 8) * 1024 ** 3
 const diskFloor = numberOption('--minimum-free-disk-gib', 15) * 1024 ** 3
-const output = join(process.cwd(), 'certification-artifacts')
+const output = resolve(stringOption('--output-dir', join(process.cwd(), 'certification-artifacts')))
 mkdirSync(output, { recursive: true })
 const availableMemory = freemem()
 const disk = statfsSync(tmpdir())
@@ -41,9 +41,8 @@ try {
     const directory = join(project, `d${Math.floor(index / 1000).toString().padStart(4, '0')}`)
     if (index % 1000 === 0) mkdirSync(directory)
     const semantic = index % 10 === 0
-    const extension = semantic ? 'js' : 'txt'
-    const content = semantic ? `export const value${index} = ${index}\n` : `${index}\n`
-    writeFileSync(join(directory, `f${index}.${extension}`), content)
+    const content = semantic ? `export const value${index} = ${index}\n` : `// file ${index}\n`
+    writeFileSync(join(directory, `f${index}.js`), content)
   }
   const generationMs = Date.now() - generatedAt
   const coldAt = Date.now()
@@ -55,11 +54,18 @@ try {
   const report = {
     cold,
     coldMs,
-    fileMix: { semanticJavaScript: Math.ceil(count / 10), trackedFallback: count - Math.ceil(count / 10) },
+    fileMix: { symbolBearingJavaScript: Math.ceil(count / 10), syntaxOnlyJavaScript: count - Math.ceil(count / 10) },
     generatedFiles: count,
     generationMs,
     peakRssBytes: process.memoryUsage().rss,
-    status: cold.updated + cold.skipped === count && warm.updated === 0 ? 'PASS' : 'FAIL',
+    status:
+      cold.files === count &&
+      cold.updated === count &&
+      cold.skipped === 0 &&
+      warm.updated === 0 &&
+      warm.unchanged === count
+        ? 'PASS'
+        : 'FAIL',
     warm,
     warmMs,
   }
@@ -76,5 +82,13 @@ function numberOption(name, fallback) {
   if (index === -1) return fallback
   const value = Number(process.argv[index + 1])
   if (!Number.isInteger(value) || value < 1) throw new Error(`${name} must be a positive integer`)
+  return value
+}
+
+function stringOption(name, fallback) {
+  const index = process.argv.indexOf(name)
+  if (index === -1) return fallback
+  const value = process.argv[index + 1]
+  if (!value) throw new Error(`${name} requires a value`)
   return value
 }

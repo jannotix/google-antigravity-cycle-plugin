@@ -17,6 +17,7 @@ test("the capacity-heavy 500k lane is explicit and resource-admitted on an isola
   assert.match(workflow, /runs-on: ubuntu-latest/u)
   assert.match(workflow, /minimum-free-memory-gib 6/u)
   assert.match(workflow, /timeout-minutes: 120/u)
+  assert.match(workflow, /uses: actions\/upload-artifact@v4\n\s+if: always\(\)/u)
 })
 
 test("the Linux Antigravity installer uses the script's supported isolated directory flag", async () => {

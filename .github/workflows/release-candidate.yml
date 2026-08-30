@@ -97,6 +97,7 @@ jobs:
       - run: npm run build
       - run: node scripts/benchmark-500k.mjs --files 500000 --minimum-free-memory-gib 6 --minimum-free-disk-gib 15
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: benchmark-500k
           path: certification-artifacts/benchmark-500k.json
