@@ -303,6 +303,51 @@ export function frozenFiles(database: Database, candidateId: string): CandidateF
     }))
 }
 
+export interface FrozenReviewFile extends CandidateFile {
+  readonly content: string | null
+  readonly contentReason: "binary_or_unavailable" | "review_budget_exceeded" | null
+}
+
+/**
+ * A bounded view of the bytes the control plane actually froze. Antigravity `share` subagents can
+ * receive a base worktree that omits uncommitted candidate files, so reviewers must judge this
+ * record rather than their own checkout. Large and binary payloads remain digest-bound but are not
+ * injected into model context.
+ */
+export function frozenReviewFiles(
+  database: Database,
+  candidateId: string,
+  maximumBytes = 256 * 1_024,
+): FrozenReviewFile[] {
+  let remaining = maximumBytes
+  const decoder = new TextDecoder("utf-8", { fatal: true })
+  return database
+    .all<Row>(
+      "select path, kind, digest, payload from candidate_files where candidate_id = ? order by path",
+      candidateId,
+    )
+    .map((row) => {
+      const base = {
+        digest: (row["digest"] as string | null) ?? null,
+        kind: String(row["kind"]),
+        path: String(row["path"]),
+      }
+      const payload = row["payload"] as Uint8Array | null
+      if (payload === null) return { ...base, content: null, contentReason: "binary_or_unavailable" }
+      if (payload.byteLength > remaining) {
+        return { ...base, content: null, contentReason: "review_budget_exceeded" }
+      }
+      try {
+        const content = decoder.decode(payload)
+        if (content.includes("\0")) throw new Error("binary payload")
+        remaining -= payload.byteLength
+        return { ...base, content, contentReason: null }
+      } catch {
+        return { ...base, content: null, contentReason: "binary_or_unavailable" }
+      }
+    })
+}
+
 export function submitReview(
   database: Database,
   workflowId: string,

@@ -28,6 +28,7 @@ import {
   candidateManifest,
   createWorkflow,
   frozenFiles,
+  frozenReviewFiles,
   lastRefusal,
   latestWorkflow,
   loadPlan,
@@ -694,6 +695,7 @@ export function candidateEvidence(context: ServiceContext, workflowId: string): 
   const requirements = loadPlan(context.database, workflowId)?.requirements.map((entry) => entry.id) ?? []
 
   if (workflow.candidateId === null) return { candidate: null, evidence: [], requirements }
+  const manifest = candidateManifest(context.database, workflow.candidateId)
   return {
     candidate: workflow.candidateId,
     evidence: loadEvidence(context.database, workflow.candidateId).map((item) => ({
@@ -703,6 +705,13 @@ export function candidateEvidence(context: ServiceContext, workflowId: string): 
       reason: item.skipReason,
       status: item.status,
     })),
+    frozenCandidate: manifest === undefined
+      ? null
+      : {
+          baseRevision: manifest.baseRevision,
+          candidateDigest: manifest.candidateDigest,
+          files: frozenReviewFiles(context.database, workflow.candidateId),
+        },
     requirements,
   }
 }

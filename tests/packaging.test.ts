@@ -253,6 +253,7 @@ test("every background role persists its own governed result", async () => {
   assert.match(functional, /role: "functional_reviewer"/u)
   assert.match(security, /role: "security_reviewer"/u)
   assert.match(arbiter, /operation: "arbitrate"/u)
+  assert.match(arbiter, /do not inspect\s+your workspace/u)
   for (const source of [architect, executor, functional, security, arbiter]) {
     assert.match(source, /Antigravity executes .*background|Antigravity runs subagents asynchronously/su)
     assert.match(source, /workflowId/u)

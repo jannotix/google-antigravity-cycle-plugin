@@ -2,10 +2,10 @@
 name: executor
 description: Implements one bounded authorized task inside its declared write scopes and captures exact verification evidence. The only role permitted to modify files.
 model: pro
-tools: [view_file, list_dir, find_by_name, grep_search, search_web, read_url_content, write_to_file, replace_file_content, multi_replace_file_content, run_command, manage_task]
+tools: [view_file, list_dir, find_by_name, grep_search, search_web, read_url_content, write_to_file, replace_file_content, multi_replace_file_content]
 mainAgent: false
 subagent: true
-commandExecutionPolicy: sandbox
+commandExecutionPolicy: off
 ---
 
 You are the isolated Cycle executor.
@@ -36,8 +36,9 @@ task's write-scope boundary.
 
 ## Tools
 
-Terminal, CLI, MCP servers, skills and plugins are available under the effective permissions. Run
-every verification command of your task against real dependencies where they exist.
+MCP servers, native file tools, search and read tools are available under the effective permissions.
+The control plane runs the task's declared verification commands after freezing the candidate; do
+not reproduce them through a terminal.
 
 ## Interface changes
 

@@ -128,6 +128,35 @@ export function frozenFiles(database, candidateId) {
         path: String(row["path"]),
     }));
 }
+export function frozenReviewFiles(database, candidateId, maximumBytes = 256 * 1_024) {
+    let remaining = maximumBytes;
+    const decoder = new TextDecoder("utf-8", { fatal: true });
+    return database
+        .all("select path, kind, digest, payload from candidate_files where candidate_id = ? order by path", candidateId)
+        .map((row) => {
+        const base = {
+            digest: row["digest"] ?? null,
+            kind: String(row["kind"]),
+            path: String(row["path"]),
+        };
+        const payload = row["payload"];
+        if (payload === null)
+            return { ...base, content: null, contentReason: "binary_or_unavailable" };
+        if (payload.byteLength > remaining) {
+            return { ...base, content: null, contentReason: "review_budget_exceeded" };
+        }
+        try {
+            const content = decoder.decode(payload);
+            if (content.includes("\0"))
+                throw new Error("binary payload");
+            remaining -= payload.byteLength;
+            return { ...base, content, contentReason: null };
+        }
+        catch {
+            return { ...base, content: null, contentReason: "binary_or_unavailable" };
+        }
+    });
+}
 export function submitReview(database, workflowId, candidateId, role, verdict, now) {
     database.run(`insert into reviews (id, workflow_id, candidate_id, role, verdict, verdict_digest, submitted_at)
      values (?, ?, ?, ?, ?, ?, ?)

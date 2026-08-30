@@ -84,7 +84,7 @@ When state is `architecture`:
    - treat the assigned workspace URI as the shared project and edit only with native file tools;
      never use `run_command` or shell redirection to write files;
    - do not commit, push, tag, publish, change branches or invoke subagents;
-   - run the task's verification commands;
+   - leave task verification commands to the Cycle control plane; the executor has no terminal;
    - on a full route, report itself through `operation: "report_task"`;
    - on a successful quick route, freeze the candidate, submit any browser self-report, and call
      `operation: "verify"` itself.
@@ -97,8 +97,9 @@ When state is `architecture`:
 2. Call it with `operation: "verify"`.
 3. Continue only when `mandatoryPassed` is exactly `true`. Otherwise call the control operation
    that begins the recorded repair path and resume from the state returned by the control plane.
-4. Read `operation: "evidence"`. If evidence cannot be read, pause; never arbitrate with an empty
-   replacement list.
+4. Read `operation: "evidence"`. If evidence or its `frozenCandidate` is missing, pause; never
+   arbitrate with an empty replacement list. Pass the returned `frozenCandidate` object verbatim to
+   every reviewer and the arbiter; their Antigravity worktrees may contain only the base revision.
 
 ## 5. Independent review
 

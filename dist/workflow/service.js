@@ -14,7 +14,7 @@ import { latestCheckpoint, signCheckpoint, verifyCheckpoints } from "../store/ch
 import { appendHistory, lastEvent, readHistory, verifyHistory } from "../store/history.js";
 import { goalOfWorkflow } from "../store/goals.js";
 import { newId } from "../store/ids.js";
-import { activeWorkflowForRequest, candidateManifest, createWorkflow, frozenFiles, lastRefusal, latestWorkflow, loadPlan, loadRequest, loadReviews, loadTasks, loadWorkflow, recordArbitration, recordCandidate, requestDigestOf, saveWorkflow, savePlan, setTaskState, submitReview, } from "../store/workflows.js";
+import { activeWorkflowForRequest, candidateManifest, createWorkflow, frozenFiles, frozenReviewFiles, lastRefusal, latestWorkflow, loadPlan, loadRequest, loadReviews, loadTasks, loadWorkflow, recordArbitration, recordCandidate, requestDigestOf, saveWorkflow, savePlan, setTaskState, submitReview, } from "../store/workflows.js";
 import { apply, isTerminal, TransitionError } from "./machine.js";
 import { parsePlan } from "./plan.js";
 import { route } from "./routing.js";
@@ -402,6 +402,7 @@ export function candidateEvidence(context, workflowId) {
     const requirements = loadPlan(context.database, workflowId)?.requirements.map((entry) => entry.id) ?? [];
     if (workflow.candidateId === null)
         return { candidate: null, evidence: [], requirements };
+    const manifest = candidateManifest(context.database, workflow.candidateId);
     return {
         candidate: workflow.candidateId,
         evidence: loadEvidence(context.database, workflow.candidateId).map((item) => ({
@@ -411,6 +412,13 @@ export function candidateEvidence(context, workflowId) {
             reason: item.skipReason,
             status: item.status,
         })),
+        frozenCandidate: manifest === undefined
+            ? null
+            : {
+                baseRevision: manifest.baseRevision,
+                candidateDigest: manifest.candidateDigest,
+                files: frozenReviewFiles(context.database, workflow.candidateId),
+            },
         requirements,
     };
 }

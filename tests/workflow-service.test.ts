@@ -12,6 +12,7 @@ import { newId } from "../src/store/ids.ts"
 import { loadWorkflow } from "../src/store/workflows.ts"
 import {
   arbitrate,
+  candidateEvidence,
   control,
   freezeCandidate,
   historyState,
@@ -476,6 +477,38 @@ test("the quick route arbitrates without a plan", () => {
       true,
     )
     assert.equal(state(decided), "delivery")
+  } finally {
+    close()
+  }
+})
+
+test("review evidence carries the bytes frozen by the control plane", () => {
+  const { close, ctx } = context()
+  try {
+    const started = startWorkflow(ctx, "add the certification marker", ["marker.txt"], "quick") as {
+      workflowId: string
+    }
+    const payload = new TextEncoder().encode("frozen bytes\n")
+    freezeCandidate(ctx, started.workflowId, {
+      manifest: {
+        ...emptyCandidate().manifest,
+        files: [{ digest: "abc", kind: "added", path: "marker.txt" }],
+      },
+      payloads: new Map([["marker.txt", payload]]),
+    })
+
+    const evidence = candidateEvidence(ctx, started.workflowId) as {
+      frozenCandidate: { files: { content: string | null; path: string }[] }
+    }
+    assert.deepEqual(evidence.frozenCandidate.files, [
+      {
+        content: "frozen bytes\n",
+        contentReason: null,
+        digest: "abc",
+        kind: "added",
+        path: "marker.txt",
+      },
+    ])
   } finally {
     close()
   }

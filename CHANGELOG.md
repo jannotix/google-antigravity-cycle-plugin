@@ -19,6 +19,8 @@
   running its build, test and typecheck components again.
 - Keeps executor writes on Antigravity native file tools inside the assigned shared workspace;
   shell-based file writes are explicitly forbidden so scoped permissions remain enforceable.
+- Supplies reviewers with bounded frozen candidate payloads from the control plane because a shared
+  Antigravity subagent worktree may omit uncommitted candidate files.
 - Restricted model configuration to Antigravity's supported `inherit`, `flash` and `pro` tiers.
 
 ### Security
