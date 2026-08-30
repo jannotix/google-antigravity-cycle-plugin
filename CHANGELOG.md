@@ -5,6 +5,8 @@
 ### Changed
 
 - Made the Node/TypeScript control plane the sole production runtime; Rust is excluded from the v1 artifact.
+- Pinned the production and certification runtime to Node.js 24.20.0 LTS.
+- Pinned the retained research workspace to Rust 1.97.0 and began tracking its `Cargo.lock`.
 - Converted the plugin to Antigravity-native `plugin.json`, `mcp_config.json`, `hooks.json`, custom-agent frontmatter and `invoke_subagent` workflows.
 - Added strict TypeScript settings, behavioral tests, vendored parser runtime, reproducible packaging and a CycloneDX SBOM.
 - Added recoverable install, upgrade, uninstall and rollback operations.

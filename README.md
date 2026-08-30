@@ -11,7 +11,7 @@ candidate freezing and delivery.
 
 ## Production architecture
 
-Version 1.1 uses one control plane: TypeScript on Node 26. Rust `workflowd` sources remain in the
+Version 1.1 uses one control plane: TypeScript on Node 24 LTS. Rust `workflowd` sources remain in the
 repository as non-shipping research and are excluded from the artifact, CI runtime and support
 contract. No feature depends on Rust, Cargo or a native binary.
 
@@ -24,7 +24,7 @@ out-of-scope changes and refuses delivery without passed mandatory gates.
 ## Requirements
 
 - Google Antigravity CLI 1.1.22 or newer, or the corresponding Antigravity Desktop runtime.
-- Node.js 26.3.x. The exact development version is recorded in `.node-version`.
+- Node.js 24.20.x LTS. The exact development version is recorded in `.node-version`.
 - Git 2.30 or newer.
 - The target project's own build and test tools.
 

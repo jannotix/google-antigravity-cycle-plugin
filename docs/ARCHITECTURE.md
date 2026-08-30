@@ -16,7 +16,8 @@ of terminating the MCP process.
 
 Rust crates are not part of the supported runtime or artifact. They are retained only as research
 until moved to a separate project; production CI and documentation must not cite their tests as
-evidence for the Antigravity plugin.
+evidence for the Antigravity plugin. Their non-shipping workspace remains reproducible through the
+tracked `Cargo.lock` and pinned Rust 1.97.0 toolchain.
 
 Role separation has three independent layers:
 

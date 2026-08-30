@@ -5,7 +5,7 @@
   "description": "Evidence-gated delivery control plane for Google Antigravity",
   "type": "module",
   "engines": {
-    "node": ">=26.3.0 <27"
+    "node": ">=24.20.0 <25"
   },
   "packageManager": "npm@11.16.0",
   "scripts": {
@@ -36,7 +36,7 @@
     "url": "https://github.com/jannotix/google-antigravity-cycle-plugin.git"
   },
   "devDependencies": {
-    "@types/node": "26.2.0",
+    "@types/node": "24.13.3",
     "typescript": "5.9.3"
   }
 }
