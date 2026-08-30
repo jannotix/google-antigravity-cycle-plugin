@@ -15,3 +15,7 @@ digest to all required lanes:
 
 WSL is supplementary and never substitutes for native Linux. macOS is compatible but untested until
 a separate lane is completed. A missing lane is `BLOCKED`, not a pass inferred from another host.
+
+The 500k lane uses an isolated Ubuntu runner, requires at least 6 GiB free memory and 15 GiB free
+disk before generating any fixture, and is hard-capped at 120 minutes. Its fixture contains 50,000
+semantic JavaScript files and 450,000 tracked fallback files, followed by cold and warm index passes.

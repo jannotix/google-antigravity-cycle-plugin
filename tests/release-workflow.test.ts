@@ -10,11 +10,13 @@ test("release receipts do not make the exact-SHA checkout dirty", async () => {
   assert.match(workflow, /certification-artifacts\/exact-sha\.txt/u)
 })
 
-test("the capacity-heavy 500k lane is an explicit dispatch decision", async () => {
+test("the capacity-heavy 500k lane is explicit and resource-admitted on an isolated runner", async () => {
   const workflow = await readFile(join(process.cwd(), ".github", "workflows", "release-candidate.yml"), "utf8")
   assert.match(workflow, /run_500k:/u)
   assert.match(workflow, /if: \$\{\{ inputs\.run_500k \}\}/u)
-  assert.match(workflow, /cycle-large/u)
+  assert.match(workflow, /runs-on: ubuntu-latest/u)
+  assert.match(workflow, /minimum-free-memory-gib 6/u)
+  assert.match(workflow, /timeout-minutes: 120/u)
 })
 
 test("the Linux Antigravity installer uses the script's supported isolated directory flag", async () => {
