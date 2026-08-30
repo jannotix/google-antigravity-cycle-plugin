@@ -7,7 +7,7 @@ Review for security and architecture: $ARGUMENTS
 
 1. Call `cycle-control/role_settings` with `consultation: "security"`.
 2. Call Antigravity `invoke_subagent` with one entry in `Subagents`: `TypeName` is the returned
-   `agent`, `Role` is `security-reviewer`, `Workspace` is `share`, and `Prompt` is the prompt below.
+   `agent`, `Role` is `security-reviewer`, `Workspace` is `inherit`, and `Prompt` is the prompt below.
 3. Call `cycle-control/record_event` with `action: "consultation.security"` and
    `role: "security_reviewer"`.
 4. Report findings ranked by severity, separating what was demonstrated from what is suspected.

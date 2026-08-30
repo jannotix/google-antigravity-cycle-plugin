@@ -7,7 +7,7 @@ Consult the architect about: $ARGUMENTS
 
 1. Call `cycle-control/role_settings` with `consultation: "architect"`.
 2. Call Antigravity `invoke_subagent` with one entry in `Subagents`: `TypeName` is the returned
-   `agent`, `Role` is `architect`, `Workspace` is `share`, and `Prompt` is the prompt below. Model
+   `agent`, `Role` is `architect`, `Workspace` is `inherit`, and `Prompt` is the prompt below. Model
    tier and tool permissions come from the packaged custom-agent frontmatter.
 3. Call `cycle-control/record_event` with `action: "consultation.architect"` and
    `role: "architect"`.

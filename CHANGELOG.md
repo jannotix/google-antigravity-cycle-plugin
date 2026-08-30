@@ -25,6 +25,8 @@
   retaining its pinned toolchain and lockfile for explicit research checks.
 - Delivery receipts count the evidence persisted after verification instead of the empty evidence
   list present when the candidate was first frozen.
+- Uses Antigravity `Workspace: "inherit"` for governed roles; CLI 1.1.22 `share` worktrees can reject
+  native file creation and omit uncommitted candidate bytes.
 - Restricted model configuration to Antigravity's supported `inherit`, `flash` and `pro` tiers.
 
 ### Security

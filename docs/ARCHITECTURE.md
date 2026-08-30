@@ -34,5 +34,10 @@ plan, task report, review or arbitration result through the MCP control plane. T
 dispatches one stage and returns; a later `/cycle:run` reads durable state before advancing. It never
 depends on an inline subagent response.
 
+Governed roles use `Workspace: "inherit"`. On CLI 1.1.22, `share` materializes an internal
+`.gemini` worktree where native file creation is denied and which can omit uncommitted candidate
+bytes. `inherit` keeps scoped file permissions attached to the active project; frozen payloads remain
+the authoritative review input.
+
 The hook is deliberately not described as an unbypassable sandbox. Antigravity and the user own the
 permission decision; delivery correctness is enforced again by the control plane.

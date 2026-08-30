@@ -21,11 +21,12 @@ field names remain exactly as specified because the control plane validates them
 Invoke a packaged role with `invoke_subagent`:
 
 ```json
-{"Subagents":[{"TypeName":"architect","Role":"architect","Prompt":"...","Workspace":"share"}]}
+{"Subagents":[{"TypeName":"architect","Role":"architect","Prompt":"...","Workspace":"inherit"}]}
 ```
 
 Use only these packaged `TypeName` values: `architect`, `executor`, `functional-reviewer`,
-`security-reviewer`, and `arbiter`. `Workspace: "share"` is required because the control plane
+`security-reviewer`, and `arbiter`. `Workspace: "inherit"` is required so native file tools operate
+inside the active project rather than an internal `.gemini` worktree. The control plane still
 freezes and verifies the opened workspace. Never use `define_subagent`, never let a Cycle role spawn
 another role, and never retry an executor automatically after a lost response.
 
@@ -81,7 +82,7 @@ When state is `architecture`:
    `workflowId`, route, verbatim request, exact task when present, all other task ownership scopes,
    recorded refusals, and these rules:
    - modify only the task's declared `write_scopes`;
-   - treat the assigned workspace URI as the shared project and edit only with native file tools;
+   - treat the assigned inherited workspace as the project and edit only with native file tools;
      never use `run_command` or shell redirection to write files;
    - do not commit, push, tag, publish, change branches or invoke subagents;
    - leave task verification commands to the Cycle control plane; the executor has no terminal;

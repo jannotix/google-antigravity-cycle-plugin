@@ -7,7 +7,7 @@ Assess readiness of: $ARGUMENTS
 
 1. Call `cycle-control/role_settings` with `consultation: "judge"`.
 2. Call Antigravity `invoke_subagent` with one entry in `Subagents`: `TypeName` is the returned
-   `agent`, `Role` is `arbiter`, `Workspace` is `share`, and `Prompt` is the prompt below.
+   `agent`, `Role` is `arbiter`, `Workspace` is `inherit`, and `Prompt` is the prompt below.
 3. Call `cycle-control/record_event` with `action: "consultation.judge"` and
    `role: "arbiter"`.
 4. Report the verdict as **ready** or **not ready**, followed by the blockers. State explicitly

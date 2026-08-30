@@ -7,7 +7,7 @@ Review functionally: $ARGUMENTS
 
 1. Call `cycle-control/role_settings` with `consultation: "review"`.
 2. Call Antigravity `invoke_subagent` with one entry in `Subagents`: `TypeName` is the returned
-   `agent`, `Role` is `functional-reviewer`, `Workspace` is `share`, and `Prompt` is the prompt below.
+   `agent`, `Role` is `functional-reviewer`, `Workspace` is `inherit`, and `Prompt` is the prompt below.
 3. Call `cycle-control/record_event` with `action: "consultation.review"` and
    `role: "functional_reviewer"`.
 4. Report the findings ranked by severity. Do not fix anything unless the user asks.
