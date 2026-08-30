@@ -443,7 +443,7 @@ test("the commit message leads with the request and records what was approved", 
       item.root,
       workflowId,
       candidateId,
-      commitMessage("add the answer endpoint", manifest, workflowId),
+      commitMessage("add the answer endpoint", manifest, workflowId, 7),
     )
     const message = show(item.root, "log", "-1", "--format=%B")
 
@@ -451,6 +451,7 @@ test("the commit message leads with the request and records what was approved", 
     assert.ok(message.includes(`Base-revision: ${manifest.baseRevision}`))
     assert.ok(message.includes(`Candidate-digest: ${manifest.candidateDigest}`))
     assert.ok(message.includes(`Cycle-workflow: ${workflowId}`))
+    assert.ok(message.includes("on 7 recorded gates"))
   } finally {
     item.close()
   }

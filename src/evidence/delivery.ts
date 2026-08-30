@@ -235,12 +235,17 @@ export async function commitCandidate(
 }
 
 /** What the commit says. The user's own words first, because those are what was judged. */
-export function commitMessage(request: string, manifest: CandidateManifest, workflowId: string): string {
+export function commitMessage(
+  request: string,
+  manifest: CandidateManifest,
+  workflowId: string,
+  recordedGates = manifest.evidenceIds.length,
+): string {
   const subject = request.trim().split(/\r?\n/u)[0]?.trim() ?? "deliver approved candidate"
   return [
     subject.length > 72 ? `${subject.slice(0, 69)}...` : subject,
     "",
-    `Delivered by Cycle against the original request, on ${manifest.evidenceIds.length} recorded ` +
+    `Delivered by Cycle against the original request, on ${recordedGates} recorded ` +
       "gates and an independent arbitration.",
     "",
     `Base-revision: ${manifest.baseRevision}`,

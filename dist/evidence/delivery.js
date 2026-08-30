@@ -133,12 +133,12 @@ export async function commitCandidate(root, manifest, message) {
         throw new DeliveryAborted("the commit did not produce a revision");
     return { committed: true, revision: head.trim() };
 }
-export function commitMessage(request, manifest, workflowId) {
+export function commitMessage(request, manifest, workflowId, recordedGates = manifest.evidenceIds.length) {
     const subject = request.trim().split(/\r?\n/u)[0]?.trim() ?? "deliver approved candidate";
     return [
         subject.length > 72 ? `${subject.slice(0, 69)}...` : subject,
         "",
-        `Delivered by Cycle against the original request, on ${manifest.evidenceIds.length} recorded ` +
+        `Delivered by Cycle against the original request, on ${recordedGates} recorded ` +
             "gates and an independent arbitration.",
         "",
         `Base-revision: ${manifest.baseRevision}`,

@@ -610,7 +610,13 @@ function deliveryMessage(
   if (manifest === undefined) {
     throw new WorkflowError("this candidate has no recorded manifest to commit against")
   }
-  return commitMessage(request?.originalText ?? "deliver approved candidate", manifest, workflowId)
+  const recordedGates = loadEvidence(context.database, candidateId).length
+  return commitMessage(
+    request?.originalText ?? "deliver approved candidate",
+    manifest,
+    workflowId,
+    recordedGates,
+  )
 }
 
 /** What a person, or a fresh session, has to do next from each state. */

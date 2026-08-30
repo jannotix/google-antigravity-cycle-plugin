@@ -23,6 +23,8 @@
   Antigravity subagent worktree may omit uncommitted candidate files.
 - Excludes the non-shipping Rust research workspace from automatic production verification while
   retaining its pinned toolchain and lockfile for explicit research checks.
+- Delivery receipts count the evidence persisted after verification instead of the empty evidence
+  list present when the candidate was first frozen.
 - Restricted model configuration to Antigravity's supported `inherit`, `flash` and `pro` tiers.
 
 ### Security
