@@ -1,7 +1,8 @@
 import { execFile } from "node:child_process"
+import { createHash } from "node:crypto"
 import { mkdtemp, mkdir, copyFile, rm, stat, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
-import { dirname, join } from "node:path"
+import { dirname, join, resolve } from "node:path"
 import { promisify } from "node:util"
 
 import { redactSecrets } from "../secrets.ts"
@@ -17,6 +18,11 @@ export const PROOF_TIMEOUT_SECONDS = 60
 const MAX_COPIED_FILES = 5_000
 const MAX_COPIED_BYTES = 64 * 1_024 * 1_024
 const GIT_TIMEOUT_MS = 30_000
+
+export function proofWorkspacePrefix(root: string): string {
+  const identity = createHash("sha256").update(resolve(root)).digest("hex").slice(0, 12)
+  return `cycle-proof-${identity}-`
+}
 
 /**
  * A proof runs against a throwaway copy and must not reach the network, install anything, or
@@ -131,7 +137,7 @@ export async function runProof(root: string, request: ProofRequest): Promise<Pro
   }
   assertProofSafe(command)
 
-  const workspace = await mkdtemp(join(tmpdir(), "cycle-proof-"))
+  const workspace = await mkdtemp(join(tmpdir(), proofWorkspacePrefix(root)))
   try {
     const copied = await copyCandidate(root, workspace)
     if (script) {

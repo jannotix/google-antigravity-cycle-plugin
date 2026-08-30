@@ -1,12 +1,12 @@
 import assert from "node:assert/strict"
 import { execFileSync } from "node:child_process"
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import { test } from "node:test"
 
 import { proofEvidence, proofGateName } from "../src/evidence/proof-evidence.ts"
-import { ProofRefused, runProof, PROOF_TIMEOUT_SECONDS } from "../src/evidence/proof.ts"
+import { proofWorkspacePrefix, ProofRefused, runProof, PROOF_TIMEOUT_SECONDS } from "../src/evidence/proof.ts"
 
 function repository(files: Record<string, string>): string {
   const root = mkdtempSync(join(tmpdir(), "cycle-proof-repo-"))
@@ -26,8 +26,8 @@ function repository(files: Record<string, string>): string {
   return root
 }
 
-const proofsLeftBehind = (): string[] =>
-  readdirSync(tmpdir()).filter((entry) => entry.startsWith("cycle-proof-"))
+const proofWorkspaces = (root: string): string[] =>
+  readdirSync(tmpdir()).filter((entry) => entry.startsWith(proofWorkspacePrefix(root)))
 
 test("a proof that exits zero demonstrated the vulnerability", async () => {
   const root = repository({ "exploit.mjs": "process.exit(0)\n" })
@@ -55,12 +55,12 @@ test("a proof that exits non-zero demonstrated nothing", async () => {
 test("a proof cannot touch the repository it is proving against", async () => {
   const root = repository({
     "exploit.mjs":
-      "import { writeFileSync } from 'node:fs'\nwriteFileSync('OWNED.txt', 'x')\nprocess.exit(0)\n",
+      "import { writeFileSync } from 'node:fs'\nwriteFileSync('OWNED.txt', 'x')\nconsole.log(process.cwd())\nprocess.exit(0)\n",
     "src/app.js": "module.exports = 1\n",
   })
   try {
-    const before = proofsLeftBehind().length
     const result = await runProof(root, { command: "node exploit.mjs" })
+    const disposable = result.outcome.output.trim()
 
     assert.equal(result.demonstrated, true)
     assert.deepEqual(
@@ -68,7 +68,8 @@ test("a proof cannot touch the repository it is proving against", async () => {
       [],
       "the proof wrote into the real repository",
     )
-    assert.equal(proofsLeftBehind().length, before, "the disposable copy was not deleted")
+    assert.match(disposable, /cycle-proof-/u)
+    assert.equal(existsSync(disposable), false, "the disposable copy was not deleted")
   } finally {
     rmSync(root, { force: true, recursive: true })
   }
@@ -77,10 +78,9 @@ test("a proof cannot touch the repository it is proving against", async () => {
 test("the disposable copy is deleted even when the proof fails to run", async () => {
   const root = repository({ "README.md": "x\n" })
   try {
-    const before = proofsLeftBehind().length
+    const before = proofWorkspaces(root)
     await runProof(root, { command: "definitely-not-a-real-program --go" })
-
-    assert.equal(proofsLeftBehind().length, before)
+    assert.deepEqual(proofWorkspaces(root), before)
   } finally {
     rmSync(root, { force: true, recursive: true })
   }
@@ -174,11 +174,11 @@ test("a proof that demonstrated nothing blocks nothing", () => {
 test("a reviewer-supplied script runs inside the copy and nowhere else", async () => {
   const root = repository({ "src/app.js": "module.exports = 1\n" })
   try {
-    const before = proofsLeftBehind().length
     const result = await runProof(root, {
       script: [
         "import { existsSync, writeFileSync } from 'node:fs'",
         "writeFileSync('OWNED.txt', 'x')",
+        "console.log(process.cwd())",
         "process.exit(existsSync('src/app.js') ? 0 : 1)",
       ].join("\n"),
     })
@@ -187,7 +187,9 @@ test("a reviewer-supplied script runs inside the copy and nowhere else", async (
     assert.ok(result.containment.some((line) => line.includes(".cycle-proof/proof.mjs")))
     assert.deepEqual(readdirSync(root).filter((entry) => entry === "OWNED.txt"), [])
     assert.deepEqual(readdirSync(root).filter((entry) => entry === ".cycle-proof"), [])
-    assert.equal(proofsLeftBehind().length, before)
+    const disposable = result.outcome.output.trim()
+    assert.match(disposable, /cycle-proof-/u)
+    assert.equal(existsSync(disposable), false)
   } finally {
     rmSync(root, { force: true, recursive: true })
   }

@@ -7,9 +7,9 @@ import { join, resolve } from 'node:path'
 import { indexProject } from '../dist/intel/indexer.js'
 import { Database } from '../dist/store/database.js'
 
-const count = numberOption('--files', 500_000)
-const memoryFloor = numberOption('--minimum-free-memory-gib', 8) * 1024 ** 3
-const diskFloor = numberOption('--minimum-free-disk-gib', 15) * 1024 ** 3
+const count = positiveIntegerOption('--files', 500_000)
+const memoryFloor = positiveNumberOption('--minimum-free-memory-gib', 8) * 1024 ** 3
+const diskFloor = positiveNumberOption('--minimum-free-disk-gib', 15) * 1024 ** 3
 const output = resolve(stringOption('--output-dir', join(process.cwd(), 'certification-artifacts')))
 mkdirSync(output, { recursive: true })
 const availableMemory = freemem()
@@ -77,11 +77,19 @@ try {
   rmSync(root, { recursive: true, force: true })
 }
 
-function numberOption(name, fallback) {
+function positiveIntegerOption(name, fallback) {
   const index = process.argv.indexOf(name)
   if (index === -1) return fallback
   const value = Number(process.argv[index + 1])
   if (!Number.isInteger(value) || value < 1) throw new Error(`${name} must be a positive integer`)
+  return value
+}
+
+function positiveNumberOption(name, fallback) {
+  const index = process.argv.indexOf(name)
+  if (index === -1) return fallback
+  const value = Number(process.argv[index + 1])
+  if (!Number.isFinite(value) || value <= 0) throw new Error(`${name} must be a positive number`)
   return value
 }
 

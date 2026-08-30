@@ -13,8 +13,8 @@ test("the filesystem benchmark indexes every supported file and proves the warm 
       [
         join(process.cwd(), "scripts", "benchmark-500k.mjs"),
         "--files", "1000",
-        "--minimum-free-memory-gib", "1",
-        "--minimum-free-disk-gib", "1",
+        "--minimum-free-memory-gib", "0.25",
+        "--minimum-free-disk-gib", "0.25",
         "--output-dir", output,
       ],
       { encoding: "utf8", timeout: 120_000 },
