@@ -43,9 +43,12 @@ cannot be observed is provider unavailability, not permission to run it twice.
 
 ## 1. Start and route
 
-1. Preserve the user's request verbatim. If `$ARGUMENTS` is empty, use the most recent user request
-   exactly as written.
-2. Call `cycle-control/workflow` with:
+1. Call `cycle-control/workflow` with `{"operation":"status"}` before starting anything. If it
+   returns a non-terminal workflow, continue that exact `workflowId` and its persisted
+   `originalRequest`. Do not call `start`, do not replace the request with the slash command, and do
+   not open a second workflow merely because `/cycle:run` repeated its arguments.
+2. Only when no non-terminal workflow exists, preserve `$ARGUMENTS` verbatim and call
+   `cycle-control/workflow` with:
 
    ```json
    {"operation":"start","request":"<verbatim request>","preference":"auto"}
@@ -53,7 +56,8 @@ cannot be observed is provider unavailability, not permission to run it twice.
 
    Use `quick` or `full` only when the user explicitly selected it.
 3. Require a `workflowId`. Then call `cycle-control/workflow` with `operation: "status"` and that
-   identifier. The status response, not a prior summary, decides the next stage.
+   identifier. The status response, not a prior summary, decides the next stage. Starting separate
+   concurrent work requires the user to say explicitly that it is a new workflow.
 4. Call `cycle-control/graph_query` with `operation: "status"`. A zero-file graph is uninitialized;
    roles must inspect the repository directly rather than trust an empty graph.
 

@@ -233,6 +233,8 @@ test("the governed run skill uses Antigravity-native delegation and the Cycle co
   assert.match(source, /subagents are asynchronous/u)
   assert.match(source, /manage_subagents/u)
   assert.match(source, /cycle-control\/workflow/u)
+  assert.match(source, /status.*before starting anything/su)
+  assert.match(source, /Do not call `start`/u)
   assert.doesNotMatch(source, /Agent tool|subagent_type|mcp__plugin_cycle_control/u)
 })
 

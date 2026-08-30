@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.1] - 2026-08-30
+
+### Fixed
+
+- `/cycle:run` now resumes the latest non-terminal workflow before considering a new start, so a
+  repeated slash command cannot fork duplicate workflows with differently normalized requests.
+
 ## [1.1.0] - 2026-08-30
 
 ### Changed

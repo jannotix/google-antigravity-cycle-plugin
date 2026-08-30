@@ -37,8 +37,8 @@ shared; `/cycle:doctor` reports correlation honestly.
 Use the unpacked release artifact, not a source snapshot without `dist/`:
 
 ```text
-agy plugin validate C:\path\to\cycle-antigravity-1.1.0
-agy plugin install C:\path\to\cycle-antigravity-1.1.0
+agy plugin validate C:\path\to\cycle-antigravity-1.1.1
+agy plugin install C:\path\to\cycle-antigravity-1.1.1
 node %USERPROFILE%\.gemini\config\plugins\cycle\bin\cycle-lifecycle.mjs activate
 ```
 
