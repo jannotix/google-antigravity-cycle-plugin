@@ -100,7 +100,13 @@ export async function discoverGates(
   if (manifest !== null) {
     ecosystems.push("node")
     const scripts = (manifest["scripts"] ?? {}) as Record<string, unknown>
-    for (const [script, kind] of Object.entries(NODE_SCRIPTS)) {
+    // A project's canonical `check` script is an umbrella gate. Running it and then independently
+    // running build, test and typecheck repeats the same work, can exceed the host MCP deadline,
+    // and does not add evidence. When no umbrella exists, discover the individual fixed-list gates.
+    const selected: readonly (readonly [string, GateKind])[] = typeof scripts["check"] === "string"
+      ? [["check", "test"]]
+      : Object.entries(NODE_SCRIPTS)
+    for (const [script, kind] of selected) {
       if (typeof scripts[script] !== "string") continue
       add(kind, `${packageManager} run ${script}`, `package.json declares the ${script} script`)
     }

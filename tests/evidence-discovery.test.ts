@@ -29,6 +29,22 @@ test("node scripts are discovered against the fixed list, not whatever the proje
   assert.deepEqual(await invocations(root), ["npm run build", "npm run lint", "npm run test"])
 })
 
+test("a canonical check script replaces redundant component gates", async () => {
+  const root = project({
+    "package-lock.json": "{}",
+    "package.json": JSON.stringify({
+      scripts: {
+        build: "tsc",
+        check: "npm run typecheck && npm run build && npm test",
+        test: "node --test",
+        typecheck: "tsc --noEmit",
+      },
+    }),
+  })
+
+  assert.deepEqual(await invocations(root), ["npm run check"])
+})
+
 // Certification 5.8.
 test("the package manager comes from the lockfile", async () => {
   assert.equal(await detectPackageManager(project({ "pnpm-lock.yaml": "" })), "pnpm")

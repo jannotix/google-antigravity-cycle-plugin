@@ -15,6 +15,8 @@
 - Kept MCP diagnostics available when an existing Cycle SQLite store fails its integrity check.
 - Adapted governed roles to Antigravity's asynchronous subagent model: every role now persists its
   own result and the coordinator advances only from durable workflow state.
+- Treats a project-native `check` script as the umbrella verification gate instead of redundantly
+  running its build, test and typecheck components again.
 - Restricted model configuration to Antigravity's supported `inherit`, `flash` and `pro` tiers.
 
 ### Security

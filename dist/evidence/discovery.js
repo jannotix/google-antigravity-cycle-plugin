@@ -77,7 +77,10 @@ export async function discoverGates(root, taskCommands) {
     if (manifest !== null) {
         ecosystems.push("node");
         const scripts = (manifest["scripts"] ?? {});
-        for (const [script, kind] of Object.entries(NODE_SCRIPTS)) {
+        const selected = typeof scripts["check"] === "string"
+            ? [["check", "test"]]
+            : Object.entries(NODE_SCRIPTS);
+        for (const [script, kind] of selected) {
             if (typeof scripts[script] !== "string")
                 continue;
             add(kind, `${packageManager} run ${script}`, `package.json declares the ${script} script`);
