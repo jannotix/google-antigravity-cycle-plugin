@@ -35,6 +35,13 @@
     "type": "git",
     "url": "https://github.com/jannotix/google-antigravity-cycle-plugin.git"
   },
+  "cycle": {
+    "verification": {
+      "excludeEcosystems": [
+        "rust"
+      ]
+    }
+  },
   "devDependencies": {
     "@types/node": "24.13.3",
     "typescript": "5.9.3"

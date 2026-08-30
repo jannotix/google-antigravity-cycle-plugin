@@ -74,6 +74,7 @@ export async function discoverGates(root, taskCommands) {
     }
     const manifest = await readJson(join(root, "package.json"));
     const packageManager = manifest === null ? null : await detectPackageManager(root);
+    const excluded = excludedEcosystems(manifest);
     if (manifest !== null) {
         ecosystems.push("node");
         const scripts = (manifest["scripts"] ?? {});
@@ -86,29 +87,41 @@ export async function discoverGates(root, taskCommands) {
             add(kind, `${packageManager} run ${script}`, `package.json declares the ${script} script`);
         }
     }
-    if (await exists(join(root, "Cargo.toml"))) {
+    if (!excluded.has("rust") && await exists(join(root, "Cargo.toml"))) {
         ecosystems.push("rust");
         for (const [kind, text] of RUST_GATES)
             add(kind, text, "the project is a Cargo workspace");
     }
-    if ((await exists(join(root, "pyproject.toml"))) || (await exists(join(root, "tox.ini")))) {
+    if (!excluded.has("python") && ((await exists(join(root, "pyproject.toml"))) || (await exists(join(root, "tox.ini"))))) {
         ecosystems.push("python");
         for (const [kind, text] of PYTHON_GATES)
             add(kind, text, "the project declares a Python build");
     }
-    if (await exists(join(root, "go.mod"))) {
+    if (!excluded.has("go") && await exists(join(root, "go.mod"))) {
         ecosystems.push("go");
         for (const [kind, text] of GO_GATES)
             add(kind, text, "the project declares a Go module");
     }
     const targets = await makeTargets(root);
-    if (targets.length > 0) {
+    if (!excluded.has("make") && targets.length > 0) {
         ecosystems.push("make");
         for (const target of targets) {
             add(MAKE_TARGETS[target], `make ${target}`, `the Makefile declares the ${target} target`);
         }
     }
     return { ecosystems, gates: [...gates.values()], packageManager };
+}
+function excludedEcosystems(manifest) {
+    const cycle = manifest?.["cycle"];
+    if (typeof cycle !== "object" || cycle === null || Array.isArray(cycle))
+        return new Set();
+    const verification = cycle["verification"];
+    if (typeof verification !== "object" || verification === null || Array.isArray(verification))
+        return new Set();
+    const values = verification["excludeEcosystems"];
+    if (!Array.isArray(values))
+        return new Set();
+    return new Set(values.filter((value) => typeof value === "string"));
 }
 export async function detectPackageManager(root) {
     for (const [lockfile, manager] of LOCKFILES) {

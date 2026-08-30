@@ -19,6 +19,10 @@ until moved to a separate project; production CI and documentation must not cite
 evidence for the Antigravity plugin. Their non-shipping workspace remains reproducible through the
 tracked `Cargo.lock` and pinned Rust 1.97.0 toolchain.
 
+The root package declares Rust under `cycle.verification.excludeEcosystems`. This prevents the
+non-shipping research workspace from being rediscovered as a mandatory gate in every production
+TypeScript workflow. Rust can still be tested explicitly; it is not evidence for the v1 plugin.
+
 Role separation has three independent layers:
 
 1. Antigravity custom-agent `tools` allowlists.

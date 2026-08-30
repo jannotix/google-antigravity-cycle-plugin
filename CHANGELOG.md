@@ -21,6 +21,8 @@
   shell-based file writes are explicitly forbidden so scoped permissions remain enforceable.
 - Supplies reviewers with bounded frozen candidate payloads from the control plane because a shared
   Antigravity subagent worktree may omit uncommitted candidate files.
+- Excludes the non-shipping Rust research workspace from automatic production verification while
+  retaining its pinned toolchain and lockfile for explicit research checks.
 - Restricted model configuration to Antigravity's supported `inherit`, `flash` and `pro` tiers.
 
 ### Security

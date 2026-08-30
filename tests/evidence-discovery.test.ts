@@ -64,6 +64,19 @@ test("a Cargo workspace gets format, clippy and test gates", async () => {
   ])
 })
 
+test("a declared non-production ecosystem is excluded from automatic gates", async () => {
+  const found = await invocations(project({
+    "Cargo.toml": "[workspace]\n",
+    "package-lock.json": "{}",
+    "package.json": JSON.stringify({
+      cycle: { verification: { excludeEcosystems: ["rust"] } },
+      scripts: { check: "node --test" },
+    }),
+  }))
+
+  assert.deepEqual(found, ["npm run check"])
+})
+
 // Certification 5.10.
 test("a Python project gets pytest, ruff and mypy", async () => {
   const found = await invocations(project({ "pyproject.toml": "[project]\nname = \"x\"\n" }))
