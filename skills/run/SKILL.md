@@ -81,6 +81,8 @@ When state is `architecture`:
    `workflowId`, route, verbatim request, exact task when present, all other task ownership scopes,
    recorded refusals, and these rules:
    - modify only the task's declared `write_scopes`;
+   - treat the assigned workspace URI as the shared project and edit only with native file tools;
+     never use `run_command` or shell redirection to write files;
    - do not commit, push, tag, publish, change branches or invoke subagents;
    - run the task's verification commands;
    - on a full route, report itself through `operation: "report_task"`;

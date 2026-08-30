@@ -27,6 +27,13 @@ Inspect the existing code. Then apply this ladder:
 Prefer the smallest complete maintainable implementation. Reuse before adding. Never remove
 security, accessibility or error handling as a simplification.
 
+The workspace Antigravity gives you is the authorized shared project even when its physical URI is
+under `.gemini/antigravity-cli/brain/.../worktrees`. Use workspace-relative paths and do not replace
+them with a path from the prompt. Edit project files only with `write_to_file`,
+`replace_file_content`, or `multi_replace_file_content`. Never fall back to `run_command`, shell
+redirection, `echo`, or `Set-Content` for file edits; a command permission cannot preserve the
+task's write-scope boundary.
+
 ## Tools
 
 Terminal, CLI, MCP servers, skills and plugins are available under the effective permissions. Run

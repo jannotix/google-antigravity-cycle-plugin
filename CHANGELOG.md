@@ -17,6 +17,8 @@
   own result and the coordinator advances only from durable workflow state.
 - Treats a project-native `check` script as the umbrella verification gate instead of redundantly
   running its build, test and typecheck components again.
+- Keeps executor writes on Antigravity native file tools inside the assigned shared workspace;
+  shell-based file writes are explicitly forbidden so scoped permissions remain enforceable.
 - Restricted model configuration to Antigravity's supported `inherit`, `flash` and `pro` tiers.
 
 ### Security

@@ -248,6 +248,8 @@ test("every background role persists its own governed result", async () => {
   assert.match(executor, /report_task/u)
   assert.match(executor, /freeze_candidate/u)
   assert.match(executor, /call `verify`/u)
+  assert.match(executor, /Never fall back to `run_command`/u)
+  assert.match(executor, /authorized shared project/u)
   assert.match(functional, /role: "functional_reviewer"/u)
   assert.match(security, /role: "security_reviewer"/u)
   assert.match(arbiter, /operation: "arbitrate"/u)
