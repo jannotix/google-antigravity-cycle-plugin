@@ -15,7 +15,23 @@ test("install, upgrade, uninstall and rollback preserve recoverable copies", () 
   try {
     const installed = run("install", first, config)
     assert.equal(installed["installed"], true)
-    assert.equal(readFileSync(join(config, "plugins", "cycle", "dist", "server.js"), "utf8"), "first")
+    const target = join(config, "plugins", "cycle")
+    assert.equal(readFileSync(join(target, "dist", "server.js"), "utf8"), "first")
+    const mcp = JSON.parse(readFileSync(join(target, "mcp_config.json"), "utf8")) as {
+      mcpServers: { "cycle-control": { args: string[]; enabledTools: string[] } }
+    }
+    assert.equal(mcp.mcpServers["cycle-control"].args[0], join(target, "dist", "server.js").replaceAll("\\", "/"))
+    assert.equal(mcp.mcpServers["cycle-control"].enabledTools.length, 10)
+    assert.ok(mcp.mcpServers["cycle-control"].enabledTools.includes("doctor"))
+    const hooks = readFileSync(join(target, "hooks.json"), "utf8")
+    assert.match(hooks, new RegExp(join(target, "hooks", "guard.mjs").replaceAll("\\", "/").replaceAll("/", "\\/"), "u"))
+    assert.match(hooks, /node \\".*guard\.mjs\\"/u)
+    assert.doesNotMatch(hooks, /\$\{extensionPath\}/u)
+
+    writeFileSync(join(target, "mcp_config.json"), JSON.stringify({ mcpServers: {} }))
+    const activated = invoke(["activate", "--config-root", config])
+    assert.equal(activated["activated"], true)
+    assert.match(readFileSync(join(target, "mcp_config.json"), "utf8"), /cycle-control/u)
 
     const upgraded = run("upgrade", second, config)
     assert.ok(upgraded["backup"])
@@ -50,10 +66,14 @@ test("an incomplete plugin is refused before the installed copy changes", () => 
 
 function plugin(path: string, server: string): string {
   mkdirSync(join(path, "dist"), { recursive: true })
+  mkdirSync(join(path, "hooks"), { recursive: true })
+  mkdirSync(join(path, "bin"), { recursive: true })
   writeFileSync(join(path, "plugin.json"), JSON.stringify({ name: "cycle", description: "test" }))
   writeFileSync(join(path, "mcp_config.json"), JSON.stringify({ mcpServers: {} }))
   writeFileSync(join(path, "hooks.json"), JSON.stringify({}))
   writeFileSync(join(path, "dist", "server.js"), server)
+  writeFileSync(join(path, "hooks", "guard.mjs"), "export {}\n")
+  writeFileSync(join(path, "bin", "cycle-lifecycle.mjs"), "export {}\n")
   return path
 }
 

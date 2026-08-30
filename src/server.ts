@@ -89,14 +89,17 @@ const cycle = new Runtime()
 const startupIntegrity = ((): string | null => {
   const database = cycle.store()
   if (database === undefined) return null
-
-  const chain = verifyHistory(database)
-  if (!chain.valid) {
-    return `the project history does not verify at sequence ${chain.sequence} (${chain.reason})`
-  }
-  const signatures = verifyCheckpoints(database)
-  if (!signatures.valid) {
-    return `the signed checkpoint at sequence ${signatures.sequence} does not verify (${signatures.reason})`
+  try {
+    const chain = verifyHistory(database)
+    if (!chain.valid) {
+      return `the project history does not verify at sequence ${chain.sequence} (${chain.reason})`
+    }
+    const signatures = verifyCheckpoints(database)
+    if (!signatures.valid) {
+      return `the signed checkpoint at sequence ${signatures.sequence} does not verify (${signatures.reason})`
+    }
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error)
   }
   return null
 })()

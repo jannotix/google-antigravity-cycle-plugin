@@ -12,8 +12,19 @@ for (const required of ['mcp_config.json', 'hooks.json', 'dist/server.js']) {
 }
 const mcp = JSON.parse(await readFile(join(root, 'mcp_config.json'), 'utf8'))
 if (Object.keys(mcp.mcpServers ?? {}).length !== 1) throw new Error('expected one MCP server')
+const control = mcp.mcpServers['cycle-control']
+if (!control || control.args?.[0] !== '${extensionPath}/dist/server.js') {
+  throw new Error('cycle-control must use the materializable extensionPath form')
+}
+if (!Array.isArray(control.enabledTools) || control.enabledTools.length !== 10 || !control.enabledTools.includes('doctor')) {
+  throw new Error('cycle-control must explicitly enable all ten shipped tools')
+}
 const hooks = JSON.parse(await readFile(join(root, 'hooks.json'), 'utf8'))
 if (Object.keys(hooks).length !== 1) throw new Error('expected one native hook')
+const hookCommand = hooks['cycle-safety']?.PreToolUse?.[0]?.hooks?.[0]?.command
+if (hookCommand !== 'node "${extensionPath}/hooks/guard.mjs"') {
+  throw new Error('cycle-safety must use the materializable extensionPath form')
+}
 const skills = (await readdir(join(root, 'skills'), { withFileTypes: true })).filter((entry) => entry.isDirectory())
 const agents = (await readdir(join(root, 'agents'), { withFileTypes: true })).filter((entry) => entry.isFile() && entry.name.endsWith('.md'))
 if (skills.length !== 24) throw new Error(`expected 24 skills, found ${skills.length}`)

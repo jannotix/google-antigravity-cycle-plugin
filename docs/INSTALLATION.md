@@ -11,15 +11,21 @@ agents, hook, MCP configuration, licences, documentation, SBOM and lifecycle uti
 ```text
 agy plugin validate <unpacked-directory>
 agy plugin install <unpacked-directory>
+node ~/.gemini/config/plugins/cycle/bin/cycle-lifecycle.mjs activate
 agy plugin list
 ```
 
-Restart Antigravity, open the target project, then run `/cycle:doctor`. Confirm `/mcp`, `/hooks`,
+`activate` replaces unresolved plugin path placeholders with the absolute installed paths. This is
+required on Antigravity CLI 1.1.22. Restart Antigravity, open the target project, then run
+`/cycle:doctor`. Confirm `/mcp`, `/hooks`,
 `/skills` and `/agents` show Cycle's components.
+
+Interactive use prompts for MCP permission. Headless certification must add only
+`mcp(cycle-control/*)` to `permissions.allow`; do not use a global MCP wildcard.
 
 ## Recoverable lifecycle utility
 
-`node bin/cycle-lifecycle.mjs install|upgrade|uninstall|rollback` operates inside
+`node bin/cycle-lifecycle.mjs activate|install|upgrade|uninstall|rollback` operates inside
 `~/.gemini/config`. Existing installed bytes are moved to `cycle-backups` before replacement.
 Uninstall is therefore reversible. The utility refuses incomplete trees and symbolic links.
 

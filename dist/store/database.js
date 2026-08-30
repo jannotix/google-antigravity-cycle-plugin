@@ -18,6 +18,15 @@ export class Database {
         if (options.path !== ":memory:")
             mkdirSync(dirname(options.path), { recursive: true });
         const database = new DatabaseSync(options.path);
+        try {
+            const row = database.prepare("pragma quick_check").get();
+            if (row?.quick_check !== "ok")
+                throw new Error(String(row?.quick_check ?? "unknown result"));
+        }
+        catch (error) {
+            database.close();
+            throw new StoreError("the Cycle database integrity check failed", { cause: error });
+        }
         const existing = readSchemaVersion(database);
         if (existing > CURRENT_SCHEMA_VERSION) {
             database.close();

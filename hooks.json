@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${extensionPath}${/}hooks${/}guard.mjs\"",
+            "command": "node \"${extensionPath}/hooks/guard.mjs\"",
             "timeout": 10
           }
         ]

@@ -1,5 +1,7 @@
 import assert from "node:assert/strict"
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { readFile } from "node:fs/promises"
+import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { test } from "node:test"
 
@@ -69,6 +71,24 @@ test("doctor returns a structured report and a rendered summary", async () => {
   ) as { version: string }
   assert.ok(result.summary.includes(`Cycle ${manifest.version}`))
   assert.ok(result.report.findings.length > 0)
+})
+
+test("a malformed database is reported by doctor instead of crashing the MCP server", async () => {
+  const dataDirectory = mkdtempSync(join(tmpdir(), "cycle-corrupt-store-"))
+  try {
+    mkdirSync(dataDirectory, { recursive: true })
+    writeFileSync(join(dataDirectory, "cycle.db"), "not a sqlite database")
+    const [response] = await exchange([call(1, "doctor")], { dataDirectory })
+    const result = payload<{
+      report: { findings: { code: string; severity: string }[]; ok: boolean }
+      summary: string
+    }>(response)
+    assert.equal(result.report.ok, false)
+    assert.ok(result.report.findings.some((finding) => finding.code === "store.open" && finding.severity === "error"))
+    assert.match(result.summary, /\[FAIL\].*database integrity check failed/u)
+  } finally {
+    rmSync(dataDirectory, { recursive: true, force: true })
+  }
 })
 
 test("an unknown tool is refused instead of answered", async () => {

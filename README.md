@@ -39,6 +39,7 @@ Use the unpacked release artifact, not a source snapshot without `dist/`:
 ```text
 agy plugin validate C:\path\to\cycle-antigravity-1.1.0
 agy plugin install C:\path\to\cycle-antigravity-1.1.0
+node %USERPROFILE%\.gemini\config\plugins\cycle\bin\cycle-lifecycle.mjs activate
 ```
 
 Then restart Antigravity and run:
@@ -47,10 +48,13 @@ Then restart Antigravity and run:
 /cycle:doctor
 ```
 
-For recoverable local lifecycle operations:
+`activate` materialises the installed absolute MCP and hook paths required by Antigravity CLI
+1.1.22. Interactive sessions can approve Cycle's MCP tools when prompted. For headless use, add the
+scoped allow rule `mcp(cycle-control/*)`; Cycle never adds it silently.
+
+For subsequent recoverable local lifecycle operations:
 
 ```text
-node bin/cycle-lifecycle.mjs install --source C:\path\to\unpacked-artifact
 node bin/cycle-lifecycle.mjs upgrade --source C:\path\to\new-artifact
 node bin/cycle-lifecycle.mjs uninstall
 node bin/cycle-lifecycle.mjs rollback

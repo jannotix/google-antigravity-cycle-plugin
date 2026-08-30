@@ -2,10 +2,22 @@
   "mcpServers": {
     "cycle-control": {
       "command": "node",
-      "args": ["${extensionPath}${/}dist${/}server.js"],
+      "args": ["${extensionPath}/dist/server.js"],
       "env": {
         "CYCLE_PLUGIN_ROOT": "${extensionPath}"
-      }
+      },
+      "enabledTools": [
+        "doctor",
+        "role_settings",
+        "permissions",
+        "record_event",
+        "index_project",
+        "graph_query",
+        "memory",
+        "goal",
+        "limits",
+        "workflow"
+      ]
     }
   }
 }

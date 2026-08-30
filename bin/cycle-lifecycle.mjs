@@ -1,11 +1,30 @@
 #!/usr/bin/env node
 
 import { randomUUID } from 'node:crypto'
-import { cp, mkdir, readdir, rename, rm, stat } from 'node:fs/promises'
+import { cp, mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { basename, join, resolve } from 'node:path'
 
-const REQUIRED = ['plugin.json', 'mcp_config.json', 'hooks.json', 'dist/server.js']
+const REQUIRED = [
+  'plugin.json',
+  'mcp_config.json',
+  'hooks.json',
+  'dist/server.js',
+  'hooks/guard.mjs',
+  'bin/cycle-lifecycle.mjs',
+]
+const ENABLED_TOOLS = [
+  'doctor',
+  'role_settings',
+  'permissions',
+  'record_event',
+  'index_project',
+  'graph_query',
+  'memory',
+  'goal',
+  'limits',
+  'workflow',
+]
 const command = process.argv[2]
 const options = parse(process.argv.slice(3))
 const configRoot = resolve(options.configRoot ?? process.env.GEMINI_CONFIG_DIR ?? join(homedir(), '.gemini', 'config'))
@@ -13,14 +32,17 @@ const plugins = join(configRoot, 'plugins')
 const target = join(plugins, 'cycle')
 const backups = join(configRoot, 'cycle-backups')
 
-if (!['install', 'upgrade', 'rollback', 'uninstall'].includes(command ?? '')) {
-  fail('usage: cycle-lifecycle <install|upgrade|rollback|uninstall> [--source DIR] [--config-root DIR] [--backup DIR]')
+if (!['activate', 'install', 'upgrade', 'rollback', 'uninstall'].includes(command ?? '')) {
+  fail('usage: cycle-lifecycle <activate|install|upgrade|rollback|uninstall> [--source DIR] [--config-root DIR] [--backup DIR]')
 }
 
 await mkdir(plugins, { recursive: true })
-await mkdir(backups, { recursive: true })
 
-if (command === 'uninstall') {
+if (command === 'activate') {
+  await validateTree(target)
+  await materialize(target)
+  print({ action: command, activated: true, target })
+} else if (command === 'uninstall') {
   const backup = await preserve(target)
   print({ action: command, backup, installed: false, target })
 } else if (command === 'rollback') {
@@ -48,6 +70,7 @@ async function installFrom(source) {
   try {
     await cp(source, staging, { recursive: true, errorOnExist: true, force: false, verbatimSymlinks: true })
     await validateTree(staging)
+    await materialize(staging, target)
     await rename(staging, target)
   } finally {
     await rm(staging, { recursive: true, force: true })
@@ -56,12 +79,14 @@ async function installFrom(source) {
 
 async function preserve(path) {
   if (!(await exists(path))) return null
+  await mkdir(backups, { recursive: true })
   const destination = join(backups, `${timestamp()}-${basename(path)}`)
   await rename(path, destination)
   return destination
 }
 
 async function latestBackup() {
+  if (!(await exists(backups))) return null
   const entries = await readdir(backups, { withFileTypes: true })
   const candidates = entries.filter((entry) => entry.isDirectory()).map((entry) => join(backups, entry.name)).sort().reverse()
   return candidates[0] ?? null
@@ -73,8 +98,41 @@ async function validateTree(root) {
     if (item === null || !item.isFile()) fail(`plugin source is missing ${path}`)
   }
   await rejectLinks(root)
-  const manifest = JSON.parse(await import('node:fs/promises').then(({ readFile }) => readFile(join(root, 'plugin.json'), 'utf8')))
+  const manifest = JSON.parse(await readFile(join(root, 'plugin.json'), 'utf8'))
   if (manifest.name !== 'cycle') fail('plugin source has the wrong manifest name')
+}
+
+/** Materialise paths because Antigravity CLI 1.1.22 does not expand plugin path variables. */
+async function materialize(root, installedRoot = root) {
+  const portable = installedRoot.replaceAll('\\', '/')
+  const mcp = {
+    mcpServers: {
+      'cycle-control': {
+        args: [`${portable}/dist/server.js`],
+        command: 'node',
+        enabledTools: ENABLED_TOOLS,
+        env: { CYCLE_PLUGIN_ROOT: portable },
+      },
+    },
+  }
+  const hooks = {
+    'cycle-safety': {
+      PreToolUse: [
+        {
+          matcher: 'run_command',
+          hooks: [
+            {
+              type: 'command',
+              command: `node "${portable}/hooks/guard.mjs"`,
+              timeout: 10,
+            },
+          ],
+        },
+      ],
+    },
+  }
+  await writeFile(join(root, 'mcp_config.json'), `${JSON.stringify(mcp, null, 2)}\n`, 'utf8')
+  await writeFile(join(root, 'hooks.json'), `${JSON.stringify(hooks, null, 2)}\n`, 'utf8')
 }
 
 async function rejectLinks(directory) {

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { mkdtempSync, rmSync } from "node:fs"
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { DatabaseSync } from "node:sqlite"
@@ -27,6 +27,21 @@ test("an empty database migrates to the current schema version", () => {
   assert.equal(database.mode, "read_write")
   assert.equal(database.schemaVersion, CURRENT_SCHEMA_VERSION)
   database.close()
+})
+
+test("a malformed database fails the integrity boundary before any query is served", () => {
+  const directory = mkdtempSync(join(tmpdir(), "cycle-malformed-store-"))
+  const path = join(directory, "cycle.db")
+  try {
+    writeFileSync(path, "not a sqlite database")
+    assert.throws(() => new Database({ path }), (error: unknown) => {
+      assert.ok(error instanceof StoreError)
+      assert.match(error.message, /integrity check failed/u)
+      return true
+    })
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
 })
 
 // Certification 1.10, 1.12.
