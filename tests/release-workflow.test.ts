@@ -16,3 +16,9 @@ test("the capacity-heavy 500k lane is an explicit dispatch decision", async () =
   assert.match(workflow, /if: \$\{\{ inputs\.run_500k \}\}/u)
   assert.match(workflow, /cycle-large/u)
 })
+
+test("the Linux Antigravity installer uses the script's supported isolated directory flag", async () => {
+  const workflow = await readFile(join(process.cwd(), ".github", "workflows", "release-candidate.yml"), "utf8")
+  assert.match(workflow, /install-agy\.sh --dir "\$RUNNER_TEMP\/agy-bin"/u)
+  assert.doesNotMatch(workflow, /install-agy\.sh --skip-/u)
+})
